@@ -32,24 +32,33 @@ int SliceData::slice_segment_data(BitStream &bitStream, PictureBase &picture,
     CtbAddrInRs = m_pps->CtbAddrTsToRs[CtbAddrInTs];
 
     // 解析当前CTU（编码树单元）的数据
-    //coding_tree_unit();
+    coding_tree_unit();
     // CtbAddrInRs 是当前CTU在光栅顺序（Raster Scan）中的地址
     // CTU在图像中的水平、垂直像素坐标
-    int32_t xCtb = (CtbAddrInRs % m_sps->PicWidthInCtbsY)
-                   << m_sps->CtbLog2SizeY;
-    int32_t yCtb = (CtbAddrInRs / m_sps->PicWidthInCtbsY)
-                   << m_sps->CtbLog2SizeY;
-    hls_decode_neighbour(xCtb, yCtb, CtbAddrInTs);
-    cabac_init(CtbAddrInTs);
-    sao(xCtb >> m_sps->CtbLog2SizeY, yCtb >> m_sps->CtbLog2SizeY);
+    //hls_decode_neighbour(xCtb, yCtb, CtbAddrInTs);
 
-    //s->deblock[CtbAddrInRs].beta_offset = s->sh.beta_offset;
-    //s->deblock[CtbAddrInRs].tc_offset = s->sh.tc_offset;
-    //s->filter_slice_edges[CtbAddrInRs] =
-    //s->sh.slice_loop_filter_across_slices_enabled_flag;
+    // – 如果 CTU 是图块中的第一个 CTU，则以下规则适用：
+    if (CtbAddrInTs == m_pps->CtbAddrRsToTs[header->slice_ctb_addr_rs]) {
+      //9.3.2.6 Initialization process for the arithmetic decoding engine
+      cabac->initialization_decoding_engine();
+      // 当前片段不是依赖片段,或者启用了 Tile 并且当前块与前一个块不在同一个 Tile 中，则初始化 CABAC 的状态
+      if (header->dependent_slice_segment_flag == 0 ||
+          (m_pps->tiles_enabled_flag &&
+           m_pps->TileId[CtbAddrInTs] != m_pps->TileId[CtbAddrInTs - 1]))
+        // – 上下文变量的初始化过程按照第 9.3.2.2 节的规定被调用。
+        cabac->initialization_context_variables(header);
+
+      // – 变量 StatCoeff[ k ] 设置为等于 0，因为 k 的范围为 0 到 3（含）。
+      for (int i = 0; i < 4; i++)
+        StatCoeff[i] = 0;
+
+      // – 按照第 9.3.2.3 节的规定调用调色板预测变量的初始化过程。
+      cabac->initialization_palette_predictor_entries(m_sps, m_pps);
+    }else{
+      std::cout << "Into -> " << __FUNCTION__ << "():" << __LINE__ << std::endl;
+      exit(0);
+    }
     end_of_slice_segment_flag = false; //TODO ae(v);
-    end_of_slice_segment_flag =
-        hls_coding_quadtree(xCtb, yCtb, m_sps->CtbLog2SizeY, 0);
 
     // 当前片段还没有结束
     if (!end_of_slice_segment_flag) {
@@ -123,7 +132,8 @@ int SliceData::ff_hevc_split_coding_unit_flag_decode(int ct_depth, int x0,
   inc += (depth_left > ct_depth);
   inc += (depth_top > ct_depth);
 
-  return cabac->get_cabac_inline(&cabac_state[elem_offset[SPLIT_CODING_UNIT_FLAG] + inc]);
+  return cabac->get_cabac_inline(
+      &cabac_state[elem_offset[SPLIT_CODING_UNIT_FLAG] + inc]);
 }
 
 int SliceData::hls_coding_quadtree(int x0, int y0, int log2_cb_size,
@@ -202,7 +212,6 @@ int SliceData::hls_coding_quadtree(int x0, int y0, int log2_cb_size,
 
   return 0;
 }
-
 
 #define BOUNDARY_LEFT_SLICE (1 << 0)
 #define BOUNDARY_LEFT_TILE (1 << 1)
@@ -353,69 +362,6 @@ int SliceData::Z_scan_order_array_initialization() {
   //}
   //MinTbAddrZs[x][y] += p;
   //}
-  return 0;
-}
-
-// 9.3.2.1 General
-int SliceData::cabac_init(int ctb_addr_ts) {
-  // – 如果 CTU 是图块中的第一个 CTU，则以下规则适用：
-  if (ctb_addr_ts == m_pps->CtbAddrRsToTs[header->slice_ctb_addr_rs]) {
-    //9.3.2.6 Initialization process for the arithmetic decoding engine
-    cabac->initialization_decoding_engine();
-
-    // 当前片段不是依赖片段,或者启用了 Tile 并且当前块与前一个块不在同一个 Tile 中，则初始化 CABAC 的状态
-    if (header->dependent_slice_segment_flag == 0 ||
-        (m_pps->tiles_enabled_flag &&
-         m_pps->TileId[ctb_addr_ts] != m_pps->TileId[ctb_addr_ts - 1]))
-      // – 上下文变量的初始化过程按照第 9.3.2.2 节的规定被调用。
-      cabac->initialization_context_variables(header);
-
-    // – 变量 StatCoeff[ k ] 设置为等于 0，因为 k 的范围为 0 到 3（含）。
-    for (int i = 0; i < 4; i++)
-      StatCoeff[i] = 0;
-
-    // – 按照第 9.3.2.3 节的规定调用调色板预测变量的初始化过程。
-    cabac->initialization_palette_predictor_entries(m_sps, m_pps);
-
-    // 如果当前片段不是图像中的第一个片段，并且启用了熵编码同步
-    if (!header->first_slice_segment_in_pic_flag &&
-        m_pps->entropy_coding_sync_enabled_flag) {
-      /* TODO YangJing  <24-10-24 06:53:26> */
-      std::cout << "Into -> " << __FUNCTION__ << "():" << __LINE__ << std::endl;
-      exit(0);
-      //// 当前块是 CTB 行的第一个块
-      //if (ctb_addr_ts % m_sps->ctb_width == 0) {
-      //  // CTB 宽度为 1（即每行只有一个 CTB），则重新初始化 CABAC 状态
-      //  if (m_sps->ctb_width == 1) cabac_init_state();
-      //  // 当前片段是依赖片段
-      //  else if (header->dependent_slice_segment_flag == 1)
-      //    load_states();
-      //}
-    }
-  } else {
-    // – 否则，如果 entropy_coding_sync_enabled_flag 等于 1 并且 CtbAddrInRs % PicWidthInCtbsY 等于0
-    if ((m_pps->entropy_coding_sync_enabled_flag) &&
-            (ctb_addr_ts % m_sps->PicWidthInCtbsY == 0) ||
-        m_pps->tiles_enabled_flag &&
-            m_pps->TileId[ctb_addr_ts] != m_pps->TileId[ctb_addr_ts - 1]) {
-      // – 空间相邻块 T 的左上角亮度样本的位置 ( xNbT, yNbT )（图 9-2）为当前 CTB 左上角亮度样本的位置 ( x0, y0 ) 导出，如下所示： TODO
-
-      //– 调用第 6.4.1 节中指定的 z 扫描顺序的块的可用性推导过程，其中位置（xCurr，yCurr）设置为（x0，y0）并且相邻位置（xNbY，yNbY）设置为等于( xNbT, yNbT ) 作为输入，输出分配给 availableFlagT。 :TODO
-      //derivation_z_scan_order_block_availability();
-
-      //– 上下文变量、Rice 参数初始化状态和调色板预测器的同步过程 :TODO
-    }
-
-    // 或 TileId[ CtbAddrInTs ] 不等于 TileId[ CtbAddrRsToTs[ CtbAddrInRs − 1 ] ]，则适用以下规则：
-
-    //– 否则，当 CtbAddrInRs 等于 slice_segment_address 且 dependent_slice_segment_flag 等于 1 时
-    if (CtbAddrInRs == header->slice_segment_address &&
-        header->dependent_slice_segment_flag) {
-      // 将调用第 9.3.2.5 节中指定的上下文变量和 Rice 参数初始化状态的同步过程，并以 TableStateIdxDs、TableMpsValDs、TableStatCoeffDs、PredictorPaletteSizeDs 和 TablePredictorPaletteEntriesDs 作为输入。
-      /* TODO YangJing  <24-10-24 07:49:13> */
-    }
-  }
-
   return 0;
 }
 

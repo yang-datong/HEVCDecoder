@@ -198,18 +198,7 @@ int Cabac::init_m_n(int32_t ctxIdx, H264_SLICE_TYPE slice_type,
 // 9.3.1.1 Initialisation process for context variables
 int Cabac::init_of_context_variables(H264_SLICE_TYPE slice_type,
                                      int32_t cabac_init_idc, int32_t SliceQPY) {
-  int m = 0, n = 0;
-  // 遍历所有的 CABAC 上下文索引
-  for (int ctxIdx = 0; ctxIdx < 1024; ++ctxIdx) {
-    // 不同的片类型（I、P、B）使用不同的上下文模型，因此 m 和 n 是根据片类型来选择的，表9-12到表9-23包含了上下文变量初始化时使用的变量n和m的值
-    if (init_m_n(ctxIdx, slice_type, cabac_init_idc, m, n) != 0) continue;
-    int preCtxState = CLIP3(1, 126, ((m * CLIP3(0, 51, SliceQPY)) >> 4) + n);
-    // preCtxState: 判断 CABAC 的起始状态属于 MPS（Most Probable Symbol，最可能符号）还是 LPS（Less Probable Symbol，较少可能符号）
-    if (preCtxState <= 63) // 初始化为 LPS
-      pStateIdxs[ctxIdx] = 63 - preCtxState, valMPSs[ctxIdx] = 0;
-    else // 初始化为 MPS
-      pStateIdxs[ctxIdx] = preCtxState - 64, valMPSs[ctxIdx] = 1;
-  }
+
   return 0;
 }
 
@@ -747,7 +736,6 @@ int Cabac::decode_sub_mb_type_in_B_slices(int32_t &synElVal) {
 
   return 0;
 }
-
 
 // 9.3.3.1.1.4 Derivation process of ctxIdxInc for the syntax element coded_block_pattern
 int Cabac::derivation_ctxIdxInc_for_coded_block_pattern(int32_t binIdx,
@@ -1937,7 +1925,6 @@ int Cabac::derivation_ctxIdxInc_for_transform_size_8x8_flag(
   return 0;
 }
 
-
 // 如果last_flag=1,则表示 CABAC_decode_last_significant_coeff_flag(...)
 int Cabac::decode_significant_coeff_flag(MB_RESIDUAL_LEVEL mb_block_level,
                                          int32_t levelListIdx,
@@ -2148,27 +2135,14 @@ int Cabac::decode_rem_intra4x4_or_intra8x8_pred_mode(int32_t &synElVal) {
 // 9.3.3.2 Arithmetic decoding process
 /* 输入：在第9.3.3.1节中导出的bypassFlag、ctxIdx以及算术解码引擎的状态变量codIRange和codIOffset 
  * 输出：bin 的值*/
-[[deprecated]]
 int Cabac::decodeBin(int32_t bypassFlag, int32_t ctxIdx, int32_t &bin) {
   int ret = 0;
   // 解码不依赖于上下文模型的状态，简单地从比特流中直接读取下一个比特
   if (bypassFlag) ret = decodeBypass(bin);
   // 解码数据流的结尾，解码终止符号
-  else if (ctxIdx == 276) //H.264
-    ret = decodeTerminate(bin);
-  // 根据指定的上下文索引 ctxIdx 解码二进制符号
-  else
-    ret = decodeDecision(ctxIdx, bin);
-  return ret;
-}
-
-int Cabac::decodeBin(int32_t ctxTable, int32_t bypassFlag, int32_t ctxIdx,
-                     int32_t &bin) {
-  int ret = 0;
-  // 解码不依赖于上下文模型的状态，简单地从比特流中直接读取下一个比特
-  if (bypassFlag) ret = decodeBypass(bin);
-  // 解码数据流的结尾，解码终止符号
-  else if (ctxTable == 0 && ctxIdx == 0) //HEVC
+  // TODO 这里用不了ctxTable后面看一下 <24-12-14 16:59:31, YangJing>
+  //else if (ctxTable == 0 && ctxIdx == 0) //HEVC
+  else if (ctxIdx == 0) //HEVC
     ret = decodeTerminate(bin);
   // 根据指定的上下文索引 ctxIdx 解码二进制符号
   else
@@ -2188,6 +2162,17 @@ int Cabac::decodeBypass(int32_t &binVal) {
   if (ivlOffset >= ivlCurrRange) binVal = 1, ivlOffset -= ivlCurrRange;
   //RET(codIOffset >= codIRange);
   return 0;
+}
+
+int Cabac::decodeBypass() {
+  // 1. 默认为0比特值
+  int binVal = 0;
+  // 2. 将已经解码的位流中添加一个新的比特，在已累积的已经编码位流中进行累加
+  ivlOffset = (ivlOffset << 1) | bs.readUn(1);
+  // 3. 进行范围调整，以保持编码过程的精度和避免溢出
+  if (ivlOffset >= ivlCurrRange) binVal = 1, ivlOffset -= ivlCurrRange;
+  //RET(codIOffset >= codIRange);
+  return binVal;
 }
 
 // 9.3.3.2.4 Decoding process for binary decisions before termination
@@ -2342,10 +2327,9 @@ int Cabac::initialization_context_variables(SliceHeader *header) {
     int n = (offsetIdx << 3) - 16;
     int pre = CLIP3(1, 126, ((m * CLIP3(0, 51, header->SliceQpY)) >> 4) + n);
     preCtxState[i] = pre;
-    int val = (pre <= 63) ? 0 : 1;
-    valMPSs[i] = val;
-    int pState_Idx = valMPSs ? (pre - 64) : (63 - pre);
-    pStateIdxs[i] = pState_Idx;
+    valMPSs[i] = (pre <= 63) ? 0 : 1;
+    /* TODO YangJing 不同初始状态的pStateIdxs只会影响CABAC的解码速度，即逼近区间的速度 <24-12-14 18:03:39> */
+    pStateIdxs[i] = valMPSs ? (pre - 64) : (63 - pre);
   }
   return 0;
 }
@@ -2383,9 +2367,43 @@ int Cabac::decode_sao_type_idx_luma(int32_t &synElVal) {
   ctxIdxOffset = 1;
   ctxIdx = ctxIdxOffset + 0;
   decodeBin(0, ctxIdx, binVal);
-  decodeBin(1, ctxIdx, binVal);
+  if (binVal == 1) {
+    decodeBin(1, ctxIdx, binVal);
+    synElVal = 1 + binVal;
+  }
+  return 0;
+}
+
+int Cabac::decode_sao_offset_abs(int32_t &synElVal) {
+  int32_t ctxIdxOffset = 0, binVal = 0, ctxIdx = 0, bypassFlag = 0;
+
+  int i = 0;
+  int length =
+      (1 << (MIN(picture.m_slice->slice_header->m_sps->bit_depth_luma, 10) -
+             5)) -
+      1;
+
+  while (i < length && decodeBypass())
+    i++;
+
+  synElVal = i;
+
+  return 0;
+}
+
+int Cabac::decode_sao_offset_sign(int32_t &synElVal) {
+  int32_t ctxIdxOffset = 0, binVal = 0, ctxIdx = 0, bypassFlag = 0;
+  decodeBypass(binVal);
   synElVal = binVal;
 
+  return 0;
+}
+
+int Cabac::decode_sao_band_position(int32_t &synElVal) {
+  int value = decodeBypass();
+  for (int i = 0; i < 4; i++)
+    value = (value << 1) | decodeBypass();
+  synElVal = value;
   return 0;
 }
 
@@ -2402,13 +2420,32 @@ int Cabac::deocde_sao_merge_left_flag(int32_t &synElVal) {
   return 0;
 }
 
-int Cabac::decode_split_cu_flag(int32_t &synElVal) {
+#define av_mod_uintp2 av_mod_uintp2_c
+static unsigned av_mod_uintp2_c(unsigned a, unsigned p) {
+  return a & ((1U << p) - 1);
+}
+int Cabac::decode_split_cu_flag(int32_t &synElVal, SPS &sps,
+                                uint8_t *tab_ct_depth, int ctb_left_flag,
+                                int ctb_up_flag, int ct_depth, int x0, int y0) {
   int32_t ctxIdxOffset = 0, ctxIdx = 0;
   int32_t binVal = 0;
   int32_t bypassFlag = 0;
 
-  ctxIdxOffset = 2;
-  ctxIdx = ctxIdxOffset + 0;
+  int depth_left = 0, depth_top = 0;
+  int x0b = av_mod_uintp2(x0, sps.CtbLog2SizeY);
+  int y0b = av_mod_uintp2(y0, sps.CtbLog2SizeY);
+  int x_cb = x0 >> sps.log2_min_luma_coding_block_size;
+  int y_cb = y0 >> sps.log2_min_luma_coding_block_size;
+
+  if (ctb_left_flag || x0b)
+    depth_left = tab_ct_depth[(y_cb)*sps.min_cb_width + x_cb - 1];
+  if (ctb_up_flag || y0b)
+    depth_top = tab_ct_depth[(y_cb - 1) * sps.min_cb_width + x_cb];
+
+  ctxIdxOffset += (depth_left > ct_depth);
+  ctxIdxOffset += (depth_top > ct_depth);
+  ctxIdx = ctxIdxOffset + 2;
+  std::cout << "ctxIdx:" << ctxIdx << std::endl;
   RET(decodeBin(bypassFlag, ctxIdx, binVal));
   synElVal = binVal;
 

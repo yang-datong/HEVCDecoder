@@ -5,6 +5,7 @@
 #include "ContextModel3DBuffer.h"
 #include "SliceHeader.hpp"
 #include "Type.hpp"
+#include <cstdint>
 #include <stdint.h>
 #include <stdlib.h>
 
@@ -15,7 +16,7 @@ class Cabac {
   //上下文变量
   int preCtxState[HEVC_CONTEXTS] = {0};
   int valMPSs[HEVC_CONTEXTS] = {0};
-  int pStateIdxs[HEVC_CONTEXTS] = {0};
+  uint8_t pStateIdxs[HEVC_CONTEXTS] = {0};
 
   //上下文引擎
   int32_t ivlCurrRange = 0;
@@ -35,7 +36,9 @@ class Cabac {
   int init_of_decoding_engine();
   int get_cabac_inline(uint8_t *const state);
 
-  int decode_split_cu_flag(int32_t &synElVal);
+  int decode_split_cu_flag(int32_t &synElVal, SPS &sps, uint8_t *tab_ct_depth,
+                           int ctb_left_flag, int ctb_up_flag, int ct_depth,
+                           int x0, int y0);
 
  private:
   int init_m_n(int32_t ctxIdx, H264_SLICE_TYPE slice_type,
@@ -67,6 +70,9 @@ class Cabac {
   int decodeBin(int32_t ctxTable, int32_t bypassFlag, int32_t ctxIdx,
                 int32_t &bin);
   int decodeDecision(int32_t ctxIdx, int32_t &binVal);
+  // 返回值形式
+  int decodeBypass();
+  // 参数返回形式
   int decodeBypass(int32_t &binVal);
   int decodeTerminate(int32_t &binVal);
   int renormD();
@@ -92,6 +98,9 @@ class Cabac {
   int decode_prev_intra4x4_or_intra8x8_pred_mode_flag(int32_t &synElVal);
   int decode_rem_intra4x4_or_intra8x8_pred_mode(int32_t &synElVal);
   int decode_coded_block_pattern(int32_t &synElVal);
+
+  int decode_sao_offset_sign(int32_t &synElVal);
+  int decode_sao_band_position(int32_t &synElVal);
 
  private:
   int decode_coded_block_flag(MB_RESIDUAL_LEVEL mb_block_level, int32_t BlkIdx,
@@ -130,6 +139,8 @@ class Cabac {
   //
 
   int decode_sao_type_idx_luma(int32_t &synElVal);
+
+  int decode_sao_offset_abs(int32_t &synElVal);
 
   int deocde_sao_merge_left_flag(int32_t &synElVal);
   //int ff_hevc_sao_merge_flag_decode();

@@ -883,7 +883,8 @@ const int32_t transIdxMPS[64] = {
     33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47, 48,
     49, 50, 51, 52, 53, 54, 55, 56, 57, 58, 59, 60, 61, 62, 62, 63};
 
-// Table 9-44 – Specification of rangeTabLPS depending on pStateIdx and qCodIRangeIdx
+// Table 9-44 – Specification of rangeTabLPS depending on pStateIdx and qCodIRangeIdx (H264)
+// Table 9-52 – Specification of rangeTabLps depending on the values of pStateIdx and qRangeIdx (HEVC)
 const int32_t rangeTabLPS[64][4] = {
     {128, 176, 208, 240}, {128, 167, 197, 227}, {128, 158, 187, 216},
     {123, 150, 178, 205}, {116, 142, 169, 195}, {111, 135, 160, 185},

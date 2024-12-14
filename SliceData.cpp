@@ -21,6 +21,8 @@ int SliceData::slice_segment_data(BitStream &bitStream, PictureBase &picture,
 
   if (cabac == nullptr) cabac = new Cabac(*bs, *pic);
 
+  tab_ct_depth = new uint8_t[m_sps->min_cb_height * m_sps->min_cb_width]{0};
+
   //----------------------- 开始对Slice分割为MacroBlock进行处理 ----------------------------
 
   //int ctb_addr_ts = m_pps->CtbAddrRsToTs[header->slice_ctb_addr_rs];
@@ -63,6 +65,7 @@ int SliceData::slice_segment_data(BitStream &bitStream, PictureBase &picture,
 
     // 解析当前CTU（编码树单元）的数据
     coding_tree_unit();
+
     end_of_slice_segment_flag = false; //TODO ae(v);
 
     // 当前片段还没有结束
@@ -408,7 +411,7 @@ int SliceData::sao(int32_t rx, int32_t ry) {
   }
 
   int SaoTypeIdx[3][32][32] = {{{0}}};
-  int sao_offset_abs[3][32][32][32] = {{{{0}}}};
+  int sao_offset_abs[3][32][32][4] = {{{{0}}}};
   int sao_offset_sign[3][32][32][32] = {{{{0}}}};
   int sao_band_position[3][32][32] = {{{0}}};
   if (!sao_merge_up_flag && !sao_merge_left_flag)
@@ -416,7 +419,7 @@ int SliceData::sao(int32_t rx, int32_t ry) {
       if ((header->slice_sao_luma_flag && cIdx == 0) ||
           (header->slice_sao_chroma_flag && cIdx > 0)) {
         if (cIdx == 0) {
-          int sao_type_idx_luma = 0; // = ae(v);
+          int sao_type_idx_luma; // = ae(v);
           cabac->decode_sao_type_idx_luma(sao_type_idx_luma);
           /* TODO YangJing 第一个CABAC解码 <24-12-14 10:13:57> */
           if (sao_type_idx_luma) {
@@ -430,16 +433,22 @@ int SliceData::sao(int32_t rx, int32_t ry) {
               SaoTypeIdx[0][rx][ry] = 0;
             }
           }
-        } else if (cIdx == 1)
-          int sao_type_idx_chroma = 0; // = ae(v);
+        } else if (cIdx == 1) {
+          int sao_type_idx_chroma; // = ae(v);
+        }
         if (SaoTypeIdx[cIdx][rx][ry] != 0) {
           for (int i = 0; i < 4; i++)
-            sao_offset_abs[cIdx][rx][ry][i] = 0; // = ae(v);
+            cabac->decode_sao_offset_abs(sao_offset_abs[cIdx][rx][ry][i]);
           if (SaoTypeIdx[cIdx][rx][ry] == 1) {
-            for (int i = 0; i < 4; i++)
-              if (sao_offset_abs[cIdx][rx][ry][i] != 0)
-                sao_offset_sign[cIdx][rx][ry][i] = 0; // = ae(v);
-            sao_band_position[cIdx][rx][ry] = 0;      // = ae(v);
+            for (int i = 0; i < 4; i++) {
+              if (sao_offset_abs[cIdx][rx][ry][i] != 0) {
+                cabac->decode_sao_offset_sign(sao_offset_sign[cIdx][rx][ry][i]);
+                if (sao_offset_sign[cIdx][rx][ry][i])
+                  sao_offset_abs[cIdx][rx][ry][i] =
+                      -sao_offset_abs[cIdx][rx][ry][i];
+              }
+            }
+            cabac->decode_sao_band_position(sao_band_position[cIdx][rx][ry]);
           } else {
             if (cIdx == 0) int sao_eo_class_luma = 0;   // = ae(v);
             if (cIdx == 1) int sao_eo_class_chroma = 0; // = ae(v);
@@ -449,11 +458,24 @@ int SliceData::sao(int32_t rx, int32_t ry) {
   return 0;
 }
 
+void SliceData::set_ct_depth(SPS *sps, int x0, int y0, int log2_cb_size,
+                             int ct_depth) {
+  int length = (1 << log2_cb_size) >> sps->log2_min_luma_coding_block_size;
+  int x_cb = x0 >> sps->log2_min_luma_coding_block_size;
+  int y_cb = y0 >> sps->log2_min_luma_coding_block_size;
+  int y;
+
+  for (y = 0; y < length; y++)
+    memset(&tab_ct_depth[(y_cb + y) * sps->min_cb_width + x_cb], ct_depth,
+           length);
+}
+
 int SliceData::coding_quadtree(int x0, int y0, int log2CbSize, int cqtDepth) {
   int32_t pic_width_in_luma_samples = m_sps->pic_width_in_luma_samples;
   int32_t pic_height_in_luma_samples = m_sps->pic_height_in_luma_samples;
   int32_t MinCbLog2SizeY = m_sps->MinCbLog2SizeY;
 
+  this->ct_depth = cqtDepth;
   int split_cu_flag[32][32] = {{0}};
   int IsCuQpDeltaCoded = 0, CuQpDeltaVal = 0, IsCuChromaQpOffsetCoded = 0;
 
@@ -463,15 +485,17 @@ int SliceData::coding_quadtree(int x0, int y0, int log2CbSize, int cqtDepth) {
   if (x0 + (1 << log2CbSize) <= pic_width_in_luma_samples &&
       y0 + (1 << log2CbSize) <= pic_height_in_luma_samples &&
       log2CbSize > MinCbLog2SizeY)
-    cabac->decode_split_cu_flag(split_cu_flag[x0][y0]); //ae(v);
+    cabac->decode_split_cu_flag(split_cu_flag[x0][y0], *m_sps, tab_ct_depth,
+                                ctb_left_flag, ctb_up_flag, ct_depth, x0, y0);
 
   if (m_pps->cu_qp_delta_enabled_flag &&
-      log2CbSize >= m_pps->Log2MinCuQpDeltaSize) {
+      log2CbSize >= m_pps->Log2MinCuQpDeltaSize)
     IsCuQpDeltaCoded = 0, CuQpDeltaVal = 0;
-  }
+
   if (header->cu_chroma_qp_offset_enabled_flag &&
       log2CbSize >= Log2MinCuChromaQpOffsetSize)
     IsCuChromaQpOffsetCoded = 0;
+
   if (split_cu_flag[x0][y0]) {
     int x1 = x0 + (1 << (log2CbSize - 1));
     int y1 = y0 + (1 << (log2CbSize - 1));
@@ -488,6 +512,7 @@ int SliceData::coding_quadtree(int x0, int y0, int log2CbSize, int cqtDepth) {
 }
 
 int SliceData::coding_unit(int x0, int y0, int log2CbSize) {
+  /* TODO YangJing 做到这里来了 <24-12-14 18:14:09> */
   //int cu_transquant_bypass_flag = false;
   //int cu_skip_flag[32][32] = {{0}};
 
@@ -576,6 +601,8 @@ int SliceData::coding_unit(int x0, int y0, int log2CbSize) {
   //    }
   //  }
   //}
+
+  set_ct_depth(m_sps, x0, y0, log2CbSize, ct_depth);
   return 0;
 }
 //

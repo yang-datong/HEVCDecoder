@@ -53,6 +53,9 @@ class SliceData {
   int Z_scan_order_array_initialization();
   int derivation_z_scan_order_block_availability(int xCurr, int yCurr, int xNbY,
                                                  int yNbY);
+  int ct_depth = 0;
+  uint8_t *tab_ct_depth;
+  void set_ct_depth(SPS *sps, int x0, int y0, int log2_cb_size, int ct_depth);
 
   uint8_t cabac_state[HEVC_CONTEXTS] = {0};
   int StatCoeff[4] = {0};

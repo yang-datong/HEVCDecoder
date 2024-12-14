@@ -693,22 +693,7 @@ int MacroBlock::SubMbPredMode(int32_t slice_type, int32_t sub_mb_type,
 int MacroBlock::residual_block_DC(int32_t coeffLevel[], int32_t startIdx,
                                   int32_t endIdx, int32_t maxNumCoeff,
                                   int iCbCr, int32_t BlkIdx) {
-  int ret = 0, TotalCoeff = 0;
-  MB_RESIDUAL_LEVEL mb_level =
-      (iCbCr == 0) ? MB_RESIDUAL_ChromaDCLevelCb : MB_RESIDUAL_ChromaDCLevelCr;
 
-  if (_is_cabac)
-    ret = _cabac->residual_block_cabac(coeffLevel, startIdx, endIdx,
-                                       maxNumCoeff, MB_RESIDUAL_ChromaDCLevel,
-                                       BlkIdx, iCbCr, TotalCoeff);
-  else
-
-    ret = _cavlc->residual_block_cavlc(coeffLevel, startIdx, endIdx,
-                                       maxNumCoeff, mb_level, m_mb_pred_mode,
-                                       BlkIdx, TotalCoeff);
-  RET(ret);
-
-  mb_chroma_4x4_non_zero_count_coeff[iCbCr][BlkIdx] = TotalCoeff;
   return 0;
 }
 
@@ -716,21 +701,6 @@ int MacroBlock::residual_block_AC(int32_t coeffLevel[], int32_t startIdx,
                                   int32_t endIdx, int32_t maxNumCoeff,
                                   int iCbCr, int32_t BlkIdx) {
 
-  int ret = 0, TotalCoeff = 0;
-  MB_RESIDUAL_LEVEL mb_level =
-      (iCbCr == 0) ? MB_RESIDUAL_ChromaACLevelCb : MB_RESIDUAL_ChromaACLevelCr;
-
-  if (_is_cabac)
-    ret = _cabac->residual_block_cabac(coeffLevel, startIdx, endIdx,
-                                       maxNumCoeff, MB_RESIDUAL_ChromaACLevel,
-                                       BlkIdx, iCbCr, TotalCoeff);
-  else
-    ret = _cavlc->residual_block_cavlc(coeffLevel, startIdx, endIdx,
-                                       maxNumCoeff, mb_level, m_mb_pred_mode,
-                                       BlkIdx, TotalCoeff);
-
-  RET(ret);
-  mb_chroma_4x4_non_zero_count_coeff[iCbCr][BlkIdx] = TotalCoeff;
   return 0;
 }
 
@@ -739,16 +709,7 @@ int MacroBlock::residual_block2(int32_t coeffLevel[], int32_t startIdx,
                                 MB_RESIDUAL_LEVEL mb_block_level, int iCbCr,
                                 int32_t BlkIdx, int &TotalCoeff) {
   int ret = 0;
-  if (_is_cabac)
-    ret =
-        _cabac->residual_block_cabac(coeffLevel, startIdx, endIdx, maxNumCoeff,
-                                     mb_block_level, BlkIdx, iCbCr, TotalCoeff);
-  else
-    ret = _cavlc->residual_block_cavlc(coeffLevel, startIdx, endIdx,
-                                       maxNumCoeff, mb_block_level,
-                                       m_mb_pred_mode, BlkIdx, TotalCoeff);
 
-  RET(ret);
   return ret;
 }
 
@@ -1027,17 +988,8 @@ int MacroBlock::process_transform_size_8x8_flag(int32_t &is_8x8_flag) {
 
 // 编码块模式（Coded Block Pattern, CBP），用于指示哪些块（亮度块和色度块）包含非零的变换系数。CBP的值决定了在解码过程中哪些块需要进行逆变换和反量化。
 int MacroBlock::process_coded_block_pattern(const uint32_t ChromaArrayType) {
-  int ret = 0;
-  if (_is_cabac)
-    ret = _cabac->decode_coded_block_pattern(coded_block_pattern);
-  else
-    coded_block_pattern = _bs->readME(ChromaArrayType, m_mb_pred_mode);
 
-  /* 亮度块模式的值范围是0到15，表示宏块中哪些4x4的亮度块包含非零系数。例如，CodedBlockPatternLuma = 5 表示宏块中第1和第3个4x4亮度块包含非零系数。 */
-  CodedBlockPatternLuma = coded_block_pattern % 16;
-  /* 色度块模式的值范围是0到3，表示宏块中哪些色度块包含非零系数。例如，CodedBlockPatternChroma = 2 表示宏块中第2个色度块包含非零系数。 */
-  CodedBlockPatternChroma = coded_block_pattern / 16;
-  return ret;
+  return 0;
 }
 
 int MacroBlock::process_mb_qp_delta() {

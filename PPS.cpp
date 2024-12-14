@@ -180,12 +180,12 @@ int PPS::extractParameters(BitStream &bs, uint32_t chroma_format_idc,
   }
 
   /* ------ */
-  CtbAddrRsToTs = new uint8_t[m_sps->PicSizeInCtbsY]{0};
-  /* TODO YangJing tileX,tileY 初始值？ <24-10-23 08:15:59> */
-  int tbX, tbY, tileX = 0, tileY = 0;
+  CtbAddrRsToTs = new int[m_sps->PicSizeInCtbsY]{0};
+  CtbAddrTsToRs = new int[m_sps->PicSizeInCtbsY]{0};
   for (int ctbAddrRs = 0; ctbAddrRs < m_sps->PicSizeInCtbsY; ctbAddrRs++) {
-    tbX = ctbAddrRs % m_sps->PicWidthInCtbsY;
-    tbY = ctbAddrRs / m_sps->PicWidthInCtbsY;
+    int tbX = ctbAddrRs % m_sps->PicWidthInCtbsY;
+    int tbY = ctbAddrRs / m_sps->PicWidthInCtbsY;
+    int tileX = 0, tileY = 0;
     for (int i = 0; i < num_tile_columns; i++)
       if (tbX >= colBd[i]) tileX = i;
     for (int j = 0; j < num_tile_rows; j++)
@@ -197,11 +197,8 @@ int PPS::extractParameters(BitStream &bs, uint32_t chroma_format_idc,
       CtbAddrRsToTs[ctbAddrRs] += m_sps->PicWidthInCtbsY * rowHeight[j];
     CtbAddrRsToTs[ctbAddrRs] +=
         (tbY - rowBd[tileY]) * colWidth[tileX] + tbX - colBd[tileX];
-  }
-
-  CtbAddrTsToRs = new uint8_t[m_sps->PicSizeInCtbsY]{0};
-  for (int ctbAddrRs = 0; ctbAddrRs < m_sps->PicSizeInCtbsY; ctbAddrRs++)
     CtbAddrTsToRs[CtbAddrRsToTs[ctbAddrRs]] = ctbAddrRs;
+  }
 
   for (int j = 0, tileIdx = 0; j <= num_tile_rows; j++)
     for (int i = 0; i < num_tile_columns; i++, tileIdx++)

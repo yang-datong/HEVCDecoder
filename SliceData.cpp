@@ -30,12 +30,13 @@ int SliceData::slice_segment_data(BitStream &bitStream, PictureBase &picture,
     // 编码顺序: 递增当前CTU的地址
     // 光栅顺序: 将编码顺序下的CTU地址转换为光栅顺序下的CTU地址
     CtbAddrInRs = m_pps->CtbAddrTsToRs[CtbAddrInTs];
+    int32_t xCtb = (CtbAddrInRs % m_sps->PicWidthInCtbsY)
+                   << m_sps->CtbLog2SizeY;
+    int32_t yCtb = (CtbAddrInRs / m_sps->PicWidthInCtbsY)
+                   << m_sps->CtbLog2SizeY;
 
-    // 解析当前CTU（编码树单元）的数据
-    coding_tree_unit();
     // CtbAddrInRs 是当前CTU在光栅顺序（Raster Scan）中的地址
-    // CTU在图像中的水平、垂直像素坐标
-    //hls_decode_neighbour(xCtb, yCtb, CtbAddrInTs);
+    hls_decode_neighbour(xCtb, yCtb, CtbAddrInTs);
 
     // – 如果 CTU 是图块中的第一个 CTU，则以下规则适用：
     if (CtbAddrInTs == m_pps->CtbAddrRsToTs[header->slice_ctb_addr_rs]) {
@@ -52,12 +53,16 @@ int SliceData::slice_segment_data(BitStream &bitStream, PictureBase &picture,
       for (int i = 0; i < 4; i++)
         StatCoeff[i] = 0;
 
-      // – 按照第 9.3.2.3 节的规定调用调色板预测变量的初始化过程。
-      cabac->initialization_palette_predictor_entries(m_sps, m_pps);
-    }else{
+      // – 按照第 9.3.2.3 节的规定调用调色板预测变量的初始化过程。 TODO 这里ffmpeg没有调用，为什么？ <24-12-14 09:06:21, YangJing>
+      //cabac->initialization_palette_predictor_entries(m_sps, m_pps);
+    } else {
+      /* TODO YangJing 暂时先不做，先完成第一个CTU解码 <24-12-14 09:05:54> */
       std::cout << "Into -> " << __FUNCTION__ << "():" << __LINE__ << std::endl;
       exit(0);
     }
+
+    // 解析当前CTU（编码树单元）的数据
+    coding_tree_unit();
     end_of_slice_segment_flag = false; //TODO ae(v);
 
     // 当前片段还没有结束
@@ -377,7 +382,7 @@ int SliceData::coding_tree_unit() {
     sao(xCtb >> m_sps->CtbLog2SizeY, yCtb >> m_sps->CtbLog2SizeY);
 
   // 递归地处理当前CTU的四叉树（QuadTree）结构
-  //coding_quadtree(xCtb, yCtb, m_sps->CtbLog2SizeY, 0);
+  coding_quadtree(xCtb, yCtb, m_sps->CtbLog2SizeY, 0);
   return 0;
 }
 
@@ -388,7 +393,7 @@ int SliceData::sao(int32_t rx, int32_t ry) {
     int leftCtbInTile = (m_pps->TileId[CtbAddrInTs] ==
                          m_pps->TileId[m_pps->CtbAddrRsToTs[CtbAddrInRs - 1]]);
     if (leftCtbInSliceSeg && leftCtbInTile)
-      sao_merge_left_flag = cabac->deocde_sao_merge_left_flag();
+      cabac->deocde_sao_merge_left_flag(sao_merge_left_flag);
   }
 
   int sao_merge_up_flag = 0;
@@ -412,6 +417,8 @@ int SliceData::sao(int32_t rx, int32_t ry) {
           (header->slice_sao_chroma_flag && cIdx > 0)) {
         if (cIdx == 0) {
           int sao_type_idx_luma = 0; // = ae(v);
+          cabac->decode_sao_type_idx_luma(sao_type_idx_luma);
+          /* TODO YangJing 第一个CABAC解码 <24-12-14 10:13:57> */
           if (sao_type_idx_luma) {
             SaoTypeIdx[0][rx][ry] = sao_type_idx_luma;
           } else {
@@ -456,7 +463,8 @@ int SliceData::coding_quadtree(int x0, int y0, int log2CbSize, int cqtDepth) {
   if (x0 + (1 << log2CbSize) <= pic_width_in_luma_samples &&
       y0 + (1 << log2CbSize) <= pic_height_in_luma_samples &&
       log2CbSize > MinCbLog2SizeY)
-    split_cu_flag[x0][y0] = 0; //ae(v);
+    cabac->decode_split_cu_flag(split_cu_flag[x0][y0]); //ae(v);
+
   if (m_pps->cu_qp_delta_enabled_flag &&
       log2CbSize >= m_pps->Log2MinCuQpDeltaSize) {
     IsCuQpDeltaCoded = 0, CuQpDeltaVal = 0;

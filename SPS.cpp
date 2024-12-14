@@ -199,7 +199,8 @@ int SPS::extractParameters(BitStream &bitStream, VPS vpss[MAX_SPS_COUNT]) {
   sps_seq_parameter_set_id = bs->readUE();
   cout << "\tSPS ID:" << sps_seq_parameter_set_id << endl;
 
-  chroma_format_idc = bs->readUE();
+  /* TODO YangJing H.264原理，这里暂时先保留ChromaArrayType字段 <24-12-14 11:31:05> */
+  ChromaArrayType = chroma_format_idc = bs->readUE();
   if (chroma_format_idc == 0)
     cout << "\tchroma_format_idc:YUV400" << endl;
   else if (chroma_format_idc == 1)
@@ -285,9 +286,16 @@ int SPS::extractParameters(BitStream &bitStream, VPS vpss[MAX_SPS_COUNT]) {
   CtbSizeY = 1 << CtbLog2SizeY;
 
   PicWidthInMinCbsY = pic_width_in_luma_samples / MinCbSizeY;
-  PicWidthInCtbsY = CEIL(pic_width_in_luma_samples / CtbSizeY);
   PicHeightInMinCbsY = pic_height_in_luma_samples / MinCbSizeY;
-  PicHeightInCtbsY = CEIL(pic_height_in_luma_samples / CtbSizeY);
+
+  /* TODO YangJing 为什么这里计算出来，少了1？ <24-12-14 11:55:31> */
+  //PicWidthInCtbsY = CEIL(pic_width_in_luma_samples / CtbSizeY);
+  //PicHeightInCtbsY = CEIL(pic_height_in_luma_samples / CtbSizeY);
+  PicWidthInCtbsY =
+      (pic_width_in_luma_samples + (1 << CtbLog2SizeY) - 1) >> CtbLog2SizeY;
+  PicHeightInCtbsY =
+      (pic_height_in_luma_samples + (1 << CtbLog2SizeY) - 1) >> CtbLog2SizeY;
+
   PicSizeInMinCbsY = PicWidthInMinCbsY * PicHeightInMinCbsY;
   PicSizeInCtbsY = PicWidthInCtbsY * PicHeightInCtbsY;
   PicSizeInSamplesY = pic_width_in_luma_samples * pic_height_in_luma_samples;

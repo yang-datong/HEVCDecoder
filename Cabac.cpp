@@ -216,8 +216,8 @@ int Cabac::init_of_context_variables(H264_SLICE_TYPE slice_type,
 // 9.3.1.2 Initialisation process for the arithmetic decoding engine
 int Cabac::init_of_decoding_engine() {
   // 编码间隔：较大的值代表了最大的概率区间, 编码位移
-  codIRange = 510, codIOffset = bs.readUn(9);
-  RET(codIOffset == 510 || codIOffset == 511);
+  ivlCurrRange = 510, ivlOffset = bs.readUn(9);
+  RET(ivlOffset == 510 || ivlOffset == 511);
   return 0;
 }
 
@@ -748,76 +748,6 @@ int Cabac::decode_sub_mb_type_in_B_slices(int32_t &synElVal) {
   return 0;
 }
 
-// 9.3.3.1.1.4 Derivation process of ctxIdxInc for the syntax element coded_block_pattern
-int Cabac::decode_coded_block_pattern(int32_t &synElVal) {
-  int32_t ChromaArrayType =
-      picture.m_slice->slice_header->m_sps->ChromaArrayType;
-  int32_t ctxIdxOffset = 0, ctxIdxInc = 0, ctxIdx = 0;
-  int32_t binIdx = -1, binVal = 0, binValues = 0;
-  int32_t bypassFlag = 0;
-
-  ctxIdxOffset = 73;
-
-  binIdx = 0;
-  RET(derivation_ctxIdxInc_for_coded_block_pattern(binIdx, binValues,
-                                                   ctxIdxOffset, ctxIdxInc));
-
-  ctxIdx = ctxIdxOffset + ctxIdxInc;
-  RET(decodeBin(bypassFlag, ctxIdx, binVal));
-  binValues = binVal;
-
-  binIdx = 1;
-  RET(derivation_ctxIdxInc_for_coded_block_pattern(binIdx, binValues,
-                                                   ctxIdxOffset, ctxIdxInc));
-
-  ctxIdx = ctxIdxOffset + ctxIdxInc;
-  RET(decodeBin(bypassFlag, ctxIdx, binVal));
-  binValues += binVal << 1;
-
-  binIdx = 2;
-  RET(derivation_ctxIdxInc_for_coded_block_pattern(binIdx, binValues,
-                                                   ctxIdxOffset, ctxIdxInc));
-
-  ctxIdx = ctxIdxOffset + ctxIdxInc;
-  RET(decodeBin(bypassFlag, ctxIdx, binVal));
-  binValues += binVal << 2;
-
-  binIdx = 3;
-  RET(derivation_ctxIdxInc_for_coded_block_pattern(binIdx, binValues,
-                                                   ctxIdxOffset, ctxIdxInc));
-
-  ctxIdx = ctxIdxOffset + ctxIdxInc;
-  RET(decodeBin(bypassFlag, ctxIdx, binVal));
-  binValues += binVal << 3;
-
-  int32_t CodedBlockPatternLuma = binValues;
-  int32_t CodedBlockPatternChroma = 0;
-  if (ChromaArrayType != 0 && ChromaArrayType != 3) {
-    ctxIdxOffset = 77, binValues = 0, binIdx = 0;
-    RET(derivation_ctxIdxInc_for_coded_block_pattern(binIdx, binValues,
-                                                     ctxIdxOffset, ctxIdxInc));
-
-    ctxIdx = ctxIdxOffset + ctxIdxInc;
-    RET(decodeBin(bypassFlag, ctxIdx, binVal));
-
-    if (binVal == 0)
-      CodedBlockPatternChroma = 0;
-    else {
-      CodedBlockPatternChroma = 1, binIdx = 1;
-      RET(derivation_ctxIdxInc_for_coded_block_pattern(
-          binIdx, binValues, ctxIdxOffset, ctxIdxInc));
-
-      ctxIdx = ctxIdxOffset + ctxIdxInc;
-      RET(decodeBin(bypassFlag, ctxIdx, binVal));
-
-      if (binVal == 1) CodedBlockPatternChroma = 2;
-    }
-  }
-
-  synElVal = CodedBlockPatternLuma + CodedBlockPatternChroma * 16;
-
-  return 0;
-}
 
 // 9.3.3.1.1.4 Derivation process of ctxIdxInc for the syntax element coded_block_pattern
 int Cabac::derivation_ctxIdxInc_for_coded_block_pattern(int32_t binIdx,
@@ -2007,98 +1937,6 @@ int Cabac::derivation_ctxIdxInc_for_transform_size_8x8_flag(
   return 0;
 }
 
-// 7.3.5.3.3 Residual block CABAC syntax
-// TODO 后面需要再仔细看一下，复现CABAC算法的时候吧 <24-10-03 15:51:55, YangJing>
-int Cabac::residual_block_cabac(int32_t coeffLevel[], int32_t startIdx,
-                                int32_t endIdx, int32_t maxNumCoeff,
-                                MB_RESIDUAL_LEVEL mb_block_level,
-                                int32_t BlkIdx, int32_t iCbCr,
-                                int32_t &TotalCoeff) {
-  const int32_t ChromaArrayType =
-      picture.m_slice->slice_header->m_sps->ChromaArrayType;
-
-  TotalCoeff = 0;
-
-  // 默认设置为1，意味着块总是被编码，除非显式地解码为0
-  int32_t coded_block_flag = 1;
-
-  //YUV4:4:4
-  if (maxNumCoeff != 64 || ChromaArrayType == 3)
-    RET(decode_coded_block_flag(mb_block_level, BlkIdx, iCbCr,
-                                coded_block_flag));
-
-  //将所有的残差系数初始化为 0
-  std::fill_n(coeffLevel, maxNumCoeff, 0);
-
-  if (!coded_block_flag) return 0;
-
-  //遍历从 startIdx 到 endIdx 的系数，解码重要系数标志（significant_coeff_flag）和最后的重要系数标志（last_significant_coeff_flag）
-  int32_t numCoeff = endIdx + 1;
-  int32_t i = startIdx;
-
-  int32_t significant_coeff_flag[64] = {0},
-          last_significant_coeff_flag[64] = {0};
-
-  while (i < numCoeff - 1) {
-    int32_t &levelListIdx = i;
-    RET(decode_significant_coeff_flag(mb_block_level, levelListIdx, 0,
-                                      significant_coeff_flag[i]));
-    if (significant_coeff_flag[i]) {
-      RET(decode_significant_coeff_flag(mb_block_level, levelListIdx, 1,
-                                        last_significant_coeff_flag[i]));
-      // 跳出循环，因为剩下的DCT变换系数都是0了
-      if (last_significant_coeff_flag[i]) numCoeff = i + 1;
-    }
-    i++;
-  }
-
-  //对最后一个系数进行解码，包括其绝对值减1的级别和符号。然后计算并更新系数的实际值
-  int32_t numDecodAbsLevelEq1 = 0, numDecodAbsLevelGt1 = 0;
-  int32_t coeff_abs_level_minus1[64] = {0}, coeff_sign_flag[64] = {0};
-  RET(decode_coeff_abs_level_minus1(mb_block_level, numDecodAbsLevelEq1,
-                                    numDecodAbsLevelGt1,
-                                    coeff_abs_level_minus1[numCoeff - 1]));
-  RET(decode_coeff_sign_flag(coeff_sign_flag[numCoeff - 1]));
-
-  coeffLevel[numCoeff - 1] = (coeff_abs_level_minus1[numCoeff - 1] + 1) *
-                             (1 - 2 * coeff_sign_flag[numCoeff - 1]);
-
-  TotalCoeff = 1;
-  if (ABS(coeffLevel[numCoeff - 1]) == 1)
-    numDecodAbsLevelEq1++;
-  else if (ABS(coeffLevel[numCoeff - 1]) > 1)
-    numDecodAbsLevelGt1++;
-
-  //逆序解码其它重要的系数，并更新它们的绝对值和符号
-  for (i = numCoeff - 2; i >= startIdx; i--) {
-    if (significant_coeff_flag[i]) {
-      TotalCoeff++;
-      RET(decode_coeff_abs_level_minus1(mb_block_level, numDecodAbsLevelEq1,
-                                        numDecodAbsLevelGt1,
-                                        coeff_abs_level_minus1[i]));
-      RET(decode_coeff_sign_flag(coeff_sign_flag[i]));
-      coeffLevel[i] =
-          (coeff_abs_level_minus1[i] + 1) * (1 - 2 * coeff_sign_flag[i]);
-
-      if (ABS(coeffLevel[i]) == 1)
-        numDecodAbsLevelEq1++;
-      else if (ABS(coeffLevel[i]) > 1)
-        numDecodAbsLevelGt1++;
-    }
-  }
-
-  //根据块级别和色度分量，更新相应的编码块标志模式
-  if (mb_block_level == MB_RESIDUAL_Intra16x16DCLevel ||
-      mb_block_level == MB_RESIDUAL_ChromaDCLevel ||
-      mb_block_level == MB_RESIDUAL_CbIntra16x16DCLevel ||
-      mb_block_level == MB_RESIDUAL_CrIntra16x16DCLevel) {
-    picture.m_mbs[picture.CurrMbAddr].coded_block_flag_DC_pattern ^=
-        1 << (iCbCr + 1);
-  } else
-    picture.m_mbs[picture.CurrMbAddr].coded_block_flag_AC_pattern[iCbCr + 1] ^=
-        1 << BlkIdx;
-  return 0;
-}
 
 // 如果last_flag=1,则表示 CABAC_decode_last_significant_coeff_flag(...)
 int Cabac::decode_significant_coeff_flag(MB_RESIDUAL_LEVEL mb_block_level,
@@ -2310,12 +2148,27 @@ int Cabac::decode_rem_intra4x4_or_intra8x8_pred_mode(int32_t &synElVal) {
 // 9.3.3.2 Arithmetic decoding process
 /* 输入：在第9.3.3.1节中导出的bypassFlag、ctxIdx以及算术解码引擎的状态变量codIRange和codIOffset 
  * 输出：bin 的值*/
+[[deprecated]]
 int Cabac::decodeBin(int32_t bypassFlag, int32_t ctxIdx, int32_t &bin) {
   int ret = 0;
   // 解码不依赖于上下文模型的状态，简单地从比特流中直接读取下一个比特
   if (bypassFlag) ret = decodeBypass(bin);
   // 解码数据流的结尾，解码终止符号
-  else if (ctxIdx == 276)
+  else if (ctxIdx == 276) //H.264
+    ret = decodeTerminate(bin);
+  // 根据指定的上下文索引 ctxIdx 解码二进制符号
+  else
+    ret = decodeDecision(ctxIdx, bin);
+  return ret;
+}
+
+int Cabac::decodeBin(int32_t ctxTable, int32_t bypassFlag, int32_t ctxIdx,
+                     int32_t &bin) {
+  int ret = 0;
+  // 解码不依赖于上下文模型的状态，简单地从比特流中直接读取下一个比特
+  if (bypassFlag) ret = decodeBypass(bin);
+  // 解码数据流的结尾，解码终止符号
+  else if (ctxTable == 0 && ctxIdx == 0) //HEVC
     ret = decodeTerminate(bin);
   // 根据指定的上下文索引 ctxIdx 解码二进制符号
   else
@@ -2330,9 +2183,9 @@ int Cabac::decodeBypass(int32_t &binVal) {
   // 1. 默认为0比特值
   binVal = 0;
   // 2. 将已经解码的位流中添加一个新的比特，在已累积的已经编码位流中进行累加
-  codIOffset = (codIOffset << 1) | bs.readUn(1);
+  ivlOffset = (ivlOffset << 1) | bs.readUn(1);
   // 3. 进行范围调整，以保持编码过程的精度和避免溢出
-  if (codIOffset >= codIRange) binVal = 1, codIOffset -= codIRange;
+  if (ivlOffset >= ivlCurrRange) binVal = 1, ivlOffset -= ivlCurrRange;
   //RET(codIOffset >= codIRange);
   return 0;
 }
@@ -2344,9 +2197,9 @@ int Cabac::decodeTerminate(int32_t &binVal) {
   // 1. 默认为0比特值
   binVal = 0;
   // 2. 准备检测终止符号。对于终止符，通常会有一个特定的概率设置（此处通过减去2来调整）。
-  codIRange -= 2;
+  ivlCurrRange -= 2;
   // 3-1. 不进行重整化，终止CABAC解码, codIOffset中插入的最后一位等于1。 NOTE:当解码end_of_slice_flag 时，寄存器codIOffset 中插入的最后一位被解释为rbsp_stop_one_bit。
-  if (codIOffset >= codIRange)
+  if (ivlOffset >= ivlCurrRange)
     binVal = 1;
   else // 执行范围重归一化
     return renormD();
@@ -2360,11 +2213,11 @@ int Cabac::decodeTerminate(int32_t &binVal) {
 int Cabac::renormD() {
   /* 如果codIRange大于或等于256，则不需要重新归一化，并且RenormD过程结束；  
    * 否则（codIRange 小于 256），进入重整化循环。在此循环中，codIRange 的值加倍，即左移 1，并使用 read_bits( 1 ) 将一位移入 codIOffset 中。  */
-  while (codIRange < 256) {
-    codIRange = codIRange << 1;
-    codIOffset = (codIOffset << 1) | bs.readUn(1);
+  while (ivlCurrRange < 256) {
+    ivlCurrRange = ivlCurrRange << 1;
+    ivlOffset = (ivlOffset << 1) | bs.readUn(1);
   }
-  return (codIOffset >= codIRange);
+  return (ivlOffset >= ivlCurrRange);
 }
 
 // 9.3.3.2.1 Arithmetic decoding process for a binary decision
@@ -2372,24 +2225,24 @@ int Cabac::renormD() {
  * 输出: 解码值 binVal 以及更新的变量 codIRange 和 codIOffset。*/
 int Cabac::decodeDecision(int32_t ctxIdx, int32_t &binVal) {
   // 1. 取第7,8位得到查询 LPS 表的索引，这里通过量化 codIRange 来选择不同的 LPS 概率区间
-  int32_t qCodIRangeIdx = (codIRange >> 6) & 0b11;
+  int32_t qCodIRangeIdx = (ivlCurrRange >> 6) & 0b11;
   // 2. 给定上下文 ctxIdx 相关联的状态索引 pStateIdx，决定 MPS 和 LPS 的概率模型
   int32_t pStateIdx = pStateIdxs[ctxIdx];
   // 3. 通过查表（rangeTabLPS）获得 LPS 对应的范围值 codIRangeLPS。
   int32_t codIRangeLPS = rangeTabLPS[pStateIdx][qCodIRangeIdx];
 
   // 4. 逐步缩小范围来逼近当前符号的概率区间
-  codIRange -= codIRangeLPS;
+  ivlCurrRange -= codIRangeLPS;
   // 5. 取得当前上下文的 MPS（最可能符号），表明此上下文中编码符号是 0 还是 1 的概率更大。
   bool valMPS = valMPSs[ctxIdx];
   // 6. 如果当前偏移量 codIOffset 大于等于 codIRange，则说明发生了 LPS 事件（即发生了最不可能的符号）
-  if (codIOffset >= codIRange) {
+  if (ivlOffset >= ivlCurrRange) {
     // a. 将 binVal 设置为与 valMPS 相反的值
     binVal = !valMPS;
     // b. 更新 codIOffset，以便进入下一步解码
-    codIOffset -= codIRange;
+    ivlOffset -= ivlCurrRange;
     // c. 更新 codIRange，以便解码新的符号
-    codIRange = codIRangeLPS;
+    ivlCurrRange = codIRangeLPS;
 
     // d. pStateIdx 为 0，反转当前上下文的 valMPS 值。状态索引为 0 时，表示 MPS 的概率非常低，因此有可能会发生 MPS 和 LPS 反转。
     if (pStateIdx == 0) valMPSs[ctxIdx] = !valMPS;
@@ -2411,7 +2264,7 @@ int Cabac::initialization_decoding_engine() {
   // 该过程的输出是初始化的解码引擎寄存器 ivlCurrRange 和 ivlOffset，均为 16 位寄存器精度
   // 算术解码引擎的状态由变量ivlCurrRange和ivlOffset表示。
   ivlCurrRange = 510;
-  // 该值解释为无符号整数的 9 位二进制表示形式，最高有效位先写入。TODO: 需要反转bit?
+  // 该值解释为无符号整数的 9 位二进制表示形式
   ivlOffset = bs.readUn(9);
   return 0;
 }
@@ -2490,16 +2343,16 @@ int Cabac::initialization_context_variables(SliceHeader *header) {
     int pre = CLIP3(1, 126, ((m * CLIP3(0, 51, header->SliceQpY)) >> 4) + n);
     preCtxState[i] = pre;
     int val = (pre <= 63) ? 0 : 1;
-    valMps[i] = val;
-    int pState_Idx = valMps ? (pre - 64) : (63 - pre);
-    pStateIdx[i] = pState_Idx;
+    valMPSs[i] = val;
+    int pState_Idx = valMPSs ? (pre - 64) : (63 - pre);
+    pStateIdxs[i] = pState_Idx;
   }
   return 0;
 }
 
 //9.3.2.3 Initialization process for palette predictor entries
 int Cabac::initialization_palette_predictor_entries(SPS *sps, PPS *pps) {
-  int numComps = (sps->ChromaArrayType == 0) ? 1 : 3;
+  int numComps = (sps->chroma_format_idc == 0) ? 1 : 3;
   int PredictorPaletteSize = 0;
   int PredictorPaletteEntries[32][32] = {0};
   if (pps->pps_palette_predictor_initializers_present_flag == 1) {
@@ -2522,11 +2375,51 @@ int Cabac::initialization_palette_predictor_entries(SPS *sps, PPS *pps) {
   return 0;
 }
 
-int Cabac::deocde_sao_merge_left_flag() {
-  //ff_hevc_sao_merge_flag_decode();
+int Cabac::decode_sao_type_idx_luma(int32_t &synElVal) {
+  int32_t ctxIdxOffset = 0, ctxIdx = 0;
+  int32_t binVal = 0;
+  int32_t bypassFlag = 0;
+
+  ctxIdxOffset = 1;
+  ctxIdx = ctxIdxOffset + 0;
+  decodeBin(0, ctxIdx, binVal);
+  decodeBin(1, ctxIdx, binVal);
+  synElVal = binVal;
+
   return 0;
 }
 
+int Cabac::deocde_sao_merge_left_flag(int32_t &synElVal) {
+  int32_t ctxIdxOffset = 0, ctxIdx = 0;
+  int32_t binVal = 0;
+  int32_t bypassFlag = 0;
+
+  ctxIdxOffset = 0;
+  ctxIdx = ctxIdxOffset + 0;
+  RET(decodeBin(bypassFlag, ctxIdx, binVal));
+  synElVal = binVal;
+
+  return 0;
+}
+
+int Cabac::decode_split_cu_flag(int32_t &synElVal) {
+  int32_t ctxIdxOffset = 0, ctxIdx = 0;
+  int32_t binVal = 0;
+  int32_t bypassFlag = 0;
+
+  ctxIdxOffset = 2;
+  ctxIdx = ctxIdxOffset + 0;
+  RET(decodeBin(bypassFlag, ctxIdx, binVal));
+  synElVal = binVal;
+
+  //RET(decodeBin(bypassFlag, ctxIdx, binVal));
+  //synElVal += binVal << 1;
+
+  //RET(decodeBin(bypassFlag, ctxIdx, binVal));
+  //synElVal += binVal << 2;
+
+  return 0;
+}
 
 #define H264_NORM_SHIFT_OFFSET 0
 
@@ -2536,4 +2429,3 @@ int Cabac::deocde_sao_merge_left_flag() {
 
 #define CABAC_BITS 16
 #define CABAC_MASK ((1 << CABAC_BITS) - 1)
-

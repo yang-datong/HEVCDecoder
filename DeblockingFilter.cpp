@@ -50,7 +50,7 @@ bool UseMacroblockTopEdgeFiltering(bool MbaffFrameFlag, int32_t mbAddr,
 // 8.7 Deblocking filter process
 int DeblockingFilter::deblocking_filter_process(PictureBase *picture) {
   this->pic = picture;
-  this->ChromaArrayType = pic->m_slice->slice_header->m_sps->ChromaArrayType;
+  this->ChromaArrayType = pic->m_slice->slice_header->m_sps->chroma_format_idc;
   this->SubWidthC = pic->m_slice->slice_header->m_sps->SubWidthC;
   this->SubHeightC = pic->m_slice->slice_header->m_sps->SubHeightC;
   this->BitDepthY = pic->m_slice->slice_header->m_sps->BitDepthY;

@@ -217,7 +217,7 @@ int SliceHeader::slice_segment_header(BitStream &bitStream, GOP &gop) {
     }
     if (m_sps->sample_adaptive_offset_enabled_flag) {
       slice_sao_luma_flag = _bs->readUn(1);
-      if (m_sps->ChromaArrayType != 0) slice_sao_chroma_flag = _bs->readUn(1);
+      if (m_sps->chroma_format_idc != 0) slice_sao_chroma_flag = _bs->readUn(1);
     }
 
     if (slice_type == HEVC_SLICE_P || slice_type == HEVC_SLICE_B) {
@@ -246,6 +246,7 @@ int SliceHeader::slice_segment_header(BitStream &bitStream, GOP &gop) {
       if (motion_vector_resolution_control_idc == 2)
         use_integer_mv_flag = _bs->readUn(1);
     }
+
     slice_qp_delta = _bs->readSE();
     if (m_pps->pps_slice_chroma_qp_offsets_present_flag) {
       slice_cb_qp_offset = _bs->readSE();

@@ -13,12 +13,13 @@ class Cabac {
  private:
   ContextModel3DBuffer *m_cSaoMergeSCModel;
   //上下文变量
-  uint8_t pStateIdxs[1024] = {0};
-  bool valMPSs[1024] = {0};
+  int preCtxState[HEVC_CONTEXTS] = {0};
+  int valMPSs[HEVC_CONTEXTS] = {0};
+  int pStateIdxs[HEVC_CONTEXTS] = {0};
 
   //上下文引擎
-  int32_t codIRange = 0;
-  int32_t codIOffset = 0;
+  int32_t ivlCurrRange = 0;
+  int32_t ivlOffset = 0;
 
   /* 声明为引用，如果Cabac消费了bs流，对应的外层也需要同样被消费 */
   BitStream &bs;
@@ -32,10 +33,9 @@ class Cabac {
   int init_of_context_variables(H264_SLICE_TYPE slice_type,
                                 int32_t cabac_init_idc, int32_t SliceQPY);
   int init_of_decoding_engine();
-  int get_cabac_inline(uint8_t * const state);
+  int get_cabac_inline(uint8_t *const state);
 
-    int ivlCurrRange = 0;
-  int ivlOffset = 0;
+  int decode_split_cu_flag(int32_t &synElVal);
 
  private:
   int init_m_n(int32_t ctxIdx, H264_SLICE_TYPE slice_type,
@@ -64,7 +64,8 @@ class Cabac {
   int derivation_ctxIdxInc_for_transform_size_8x8_flag(int32_t &ctxIdxInc);
 
   int decodeBin(int32_t bypassFlag, int32_t ctxIdx, int32_t &bin);
-  void decodeBin(int &ruiBin, ContextModel &rcCtxModel);
+  int decodeBin(int32_t ctxTable, int32_t bypassFlag, int32_t ctxIdx,
+                int32_t &bin);
   int decodeDecision(int32_t ctxIdx, int32_t &binVal);
   int decodeBypass(int32_t &binVal);
   int decodeTerminate(int32_t &binVal);
@@ -113,23 +114,24 @@ class Cabac {
                            int32_t iCbCr, int32_t &TotalCoeff);
 
  public:
-int initialization_decoding_engine();
+  int initialization_decoding_engine();
   int initialization_context_variables(SliceHeader *header);
   int initialization_palette_predictor_entries(SPS *sps, PPS *pps);
-  int preCtxState[HEVC_CONTEXTS] = {0};
-  int valMps[HEVC_CONTEXTS] = {0};
-  int pStateIdx[HEVC_CONTEXTS] = {0};
 
   //typedef struct CABACContext {
-    //int low;
-    //int range;
-    //const uint8_t *bytestream_start;
-    //const uint8_t *bytestream;
-    //const uint8_t *bytestream_end;
+  //int low;
+  //int range;
+  //const uint8_t *bytestream_start;
+  //const uint8_t *bytestream;
+  //const uint8_t *bytestream_end;
   //} CABACContext;
 
   //CABACContext *c = nullptr;
-  int deocde_sao_merge_left_flag();
+  //
+
+  int decode_sao_type_idx_luma(int32_t &synElVal);
+
+  int deocde_sao_merge_left_flag(int32_t &synElVal);
   //int ff_hevc_sao_merge_flag_decode();
   //int get_cabac(uint8_t *const state);
   void refill2();

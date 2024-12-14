@@ -56,10 +56,10 @@ class PPS {
   // 熵编码同步的启用标志：熵编码同步是一种并行化技术，允许在不同的 CTB 行之间同步 CABAC 状态。
   int32_t entropy_coding_sync_enabled_flag = 0;
   // 瓦片列数和行数减1。
-  int32_t num_tile_columns = 0;
-  int32_t num_tile_rows = 0;
+  int32_t num_tile_columns = 1;
+  int32_t num_tile_rows = 1;
   // 指示瓦片是否均匀分布。
-  int32_t uniform_spacing_flag = 0;
+  int32_t uniform_spacing_flag = 1;
   // 定义瓦片的列宽和行高减1。
   int32_t column_width_minus1[32] = {0};
   int32_t row_height_minus1[32] = {0};
@@ -119,8 +119,8 @@ class PPS {
   int chroma_bit_depth_entry_minus8 = 0;
   int pps_palette_predictor_initializer[3][128] = {{0}};
 
-  uint8_t *CtbAddrTsToRs = nullptr;
-  uint8_t *CtbAddrRsToTs = nullptr;
+  int *CtbAddrTsToRs = nullptr;
+  int *CtbAddrRsToTs = nullptr;
   int col_idxX[32] = {0};
   int rowHeight[32] = {0};
   int colWidth[32] = {0};

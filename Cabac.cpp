@@ -2458,6 +2458,28 @@ int Cabac::decode_split_cu_flag(int32_t &synElVal, SPS &sps,
   return 0;
 }
 
+#define SAMPLE_CTB(tab, x, y) ((tab)[(y) * min_cb_width + (x)])
+int Cabac::decode_cu_skip_flag(int32_t ctxIdx, int x0, int y0, int x_cb,
+                               int y_cb, int ctb_left_flag, int ctb_up_flag,
+                               uint8_t *skip_flag) {
+  SPS *m_sps = picture.m_slice->slice_header->m_sps;
+  int min_cb_width = m_sps->min_cb_width;
+  int inc = 0;
+  int x0b = av_mod_uintp2(x0, m_sps->CtbLog2SizeY);
+  int y0b = av_mod_uintp2(y0, m_sps->CtbLog2SizeY);
+
+  if (ctb_left_flag || x0b) inc = !!SAMPLE_CTB(skip_flag, x_cb - 1, y_cb);
+  if (ctb_up_flag || y0b) inc += !!SAMPLE_CTB(skip_flag, x_cb, y_cb - 1);
+
+  return decode_bin(elem_offset[SKIP_FLAG] + inc);
+}
+
+int Cabac::decode_bin(int32_t ctxIdx) {
+  int bin = 0;
+  decodeDecision(ctxIdx, bin);
+  return bin;
+}
+
 #define H264_NORM_SHIFT_OFFSET 0
 
 #define H264_LPS_RANGE_OFFSET 512

@@ -69,6 +69,7 @@ class Cabac {
   int decodeBin(int32_t bypassFlag, int32_t ctxIdx, int32_t &bin);
   int decodeBin(int32_t ctxTable, int32_t bypassFlag, int32_t ctxIdx,
                 int32_t &bin);
+
   int decodeDecision(int32_t ctxIdx, int32_t &binVal);
   // 返回值形式
   int decodeBypass();
@@ -85,6 +86,10 @@ class Cabac {
   int decode_sub_mb_type_in_B_slices(int32_t &synElVal);
 
  public:
+  int decode_cu_skip_flag(int32_t ctxIdx, int x0, int y0, int x_cb,
+                               int y_cb, int ctb_left_flag, int ctb_up_flag,
+                               uint8_t *skip_flag);
+  int decode_bin(int32_t ctxIdx);
   int decode_mb_skip_flag(int32_t currMbAddr, int32_t &synElVal);
   int decode_mb_field_decoding_flag(int32_t &synElVal);
   int decode_mb_type(int32_t &synElVal);

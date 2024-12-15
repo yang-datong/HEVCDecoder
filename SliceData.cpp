@@ -523,10 +523,14 @@ int SliceData::coding_unit(int x0, int y0, int log2CbSize) {
   int &PartMode = part_mode;
   int IntraSplitFlag = 0;
 
+  int x_cb = x0 >> m_sps->log2_min_luma_coding_block_size;
+  int y_cb = y0 >> m_sps->log2_min_luma_coding_block_size;
+
   if (m_pps->transquant_bypass_enabled_flag)
-    cu_transquant_bypass_flag = 0; //ae(v);
+    cu_transquant_bypass_flag =
+        cabac->decode_bin(IHEVC_CAB_CU_TQ_BYPASS_FLAG); //ae(v);
   if (header->slice_type != HEVC_SLICE_I) {
-    cu_skip_flag[x0][y0] = 0; //ae(v);
+    //cu_skip_flag[x0][y0] = cabac->decode_cu_skip_flag(x0, y0, x_cb, y_cb, ctb_left_flag, ctb_up_left_flag, mb_skip_flag); //ae(v);
     CuPredMode[x0][y0] = cu_skip_flag[x0][y0] ? MODE_SKIP : MODE_INTER;
   }
   int nCbS = (1 << log2CbSize);
@@ -682,9 +686,10 @@ int SliceData::pcm_sample(int x0, int y0, int log2CbSize) {
 
   return 0;
 }
-//
+
 int SliceData::transform_tree(int x0, int y0, int xBase, int yBase,
                               int log2TrafoSize, int trafoDepth, int blkIdx) {
+  std::cout << "Into -> " << __FUNCTION__ << "():" << __LINE__ << std::endl;
   //  if (log2TrafoSize <= MaxTbLog2SizeY && log2TrafoSize > MinTbLog2SizeY &&
   //      trafoDepth < MaxTrafoDepth && !(IntraSplitFlag && (trafoDepth == 0)))
   //    split_transform_flag[x0][y0][trafoDepth] = ae(v);
@@ -720,8 +725,9 @@ int SliceData::transform_tree(int x0, int y0, int xBase, int yBase,
   //  }
   return 0;
 }
-//
+
 int SliceData::mvd_coding(int x0, int y0, int refList) {
+  std::cout << "Into -> " << __FUNCTION__ << "():" << __LINE__ << std::endl;
   //  abs_mvd_greater0_flag[0] = ae(v);
   //  abs_mvd_greater0_flag[1] = ae(v);
   //  if (abs_mvd_greater0_flag[0]) abs_mvd_greater1_flag[0] = ae(v);
@@ -736,9 +742,10 @@ int SliceData::mvd_coding(int x0, int y0, int refList) {
   //  }
   return 0;
 }
-//
+
 int SliceData::transform_unit(int x0, int y0, int xBase, int yBase,
                               int log2TrafoSize, int trafoDepth, int blkIdx) {
+  std::cout << "Into -> " << __FUNCTION__ << "():" << __LINE__ << std::endl;
   //  log2TrafoSizeC = Max(2, log2TrafoSize - (ChromaArrayType == 3 ? 0 : 1));
   //  cbfDepthC = trafoDepth - (ChromaArrayType != 3 && log2TrafoSize == 2 ? 1 : 0);
   //  xC = (ChromaArrayType != 3 && log2TrafoSize == 2) ? xBase : x0;
@@ -791,8 +798,9 @@ int SliceData::transform_unit(int x0, int y0, int xBase, int yBase,
   //  }
   return 0;
 }
-//
+
 int SliceData::residual_coding(int x0, int y0, int log2TrafoSize, int cIdx) {
+  std::cout << "Into -> " << __FUNCTION__ << "():" << __LINE__ << std::endl;
   //  if (transform_skip_enabled_flag && !cu_transquant_bypass_flag &&
   //      (log2TrafoSize <= Log2MaxTransformSkipSize))
   //    transform_skip_flag[x0][y0][cIdx] = ae(v);
@@ -904,12 +912,14 @@ int SliceData::residual_coding(int x0, int y0, int log2TrafoSize, int cIdx) {
 }
 //
 int SliceData::cross_comp_pred(int x0, int y0, int c) {
+  std::cout << "Into -> " << __FUNCTION__ << "():" << __LINE__ << std::endl;
   //  log2_res_scale_abs_plus1[c] = ae(v);
   //  if (log2_res_scale_abs_plus1[c] != 0) res_scale_sign_flag[c] = ae(v);
   return 0;
 }
 //
 int SliceData::palette_coding(int x0, int y0, int nCbS) {
+  std::cout << "Into -> " << __FUNCTION__ << "():" << __LINE__ << std::endl;
   //  palettePredictionFinished = 0;
   //  NumPredictedPaletteEntries = 0;
   //  for (predictorEntryIdx = 0;

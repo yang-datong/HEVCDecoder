@@ -126,6 +126,7 @@ class SliceHeader {
   int deltaRps = 0;
 
   int SliceQpY = 0;
+  int MaxNumMergeCand = 0;
   int32_t NumPicTotalCurr = 0;
 
   int CurrRpsIdx = 0;

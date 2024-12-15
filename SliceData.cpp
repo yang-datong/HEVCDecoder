@@ -511,135 +511,175 @@ int SliceData::coding_quadtree(int x0, int y0, int log2CbSize, int cqtDepth) {
   return 0;
 }
 
+//decode_cu()
+//hls_coding_unit()
 int SliceData::coding_unit(int x0, int y0, int log2CbSize) {
-  /* TODO YangJing 做到这里来了 <24-12-14 18:14:09> */
-  //int cu_transquant_bypass_flag = false;
-  //int cu_skip_flag[32][32] = {{0}};
+  int cu_transquant_bypass_flag = false;
+  int CuPredMode[32][32] = {{0}};
+  int palette_mode_flag[32][32] = {{0}};
+  int MaxTbLog2SizeY = m_sps->log2_min_luma_transform_block_size +
+                       m_sps->log2_diff_max_min_luma_transform_block_size;
+  int part_mode = 0;
+  int &PartMode = part_mode;
+  int IntraSplitFlag = 0;
 
-  //if (m_pps->transquant_bypass_enabled_flag)
-  //  cu_transquant_bypass_flag = 0;                                  //ae(v);
-  //if (header->slice_type != HEVC_SLICE_I) cu_skip_flag[x0][y0] = 0; //ae(v);
-  //int nCbS = (1 << log2CbSize);
-  //if (cu_skip_flag[x0][y0])
-  //  prediction_unit(x0, y0, nCbS, nCbS);
-  //else {
-  //  if (header->slice_type != HEVC_SLICE_I) int pred_mode_flag = ae(v);
-  //  if (palette_mode_enabled_flag && CuPredMode[x0][y0] == MODE_INTRA &&
-  //      log2CbSize <= MaxTbLog2SizeY)
-  //    palette_mode_flag[x0][y0] = ae(v);
-  //  if (palette_mode_flag[x0][y0])
-  //    palette_coding(x0, y0, nCbS);
-  //  else {
-  //    if (CuPredMode[x0][y0] != MODE_INTRA || log2CbSize == MinCbLog2SizeY)
-  //      part_mode = ae(v);
-  //    if (CuPredMode[x0][y0] == MODE_INTRA) {
-  //      if (PartMode == PART_2Nx2N && pcm_enabled_flag &&
-  //          log2CbSize >= Log2MinIpcmCbSizeY &&
-  //          log2CbSize <= Log2MaxIpcmCbSizeY)
-  //        pcm_flag[x0][y0] = ae(v);
-  //      if (pcm_flag[x0][y0]) {
-  //        while (!byte_aligned())
-  //          pcm_alignment_zero_bit f(1);
-  //        pcm_sample(x0, y0, log2CbSize);
-  //      } else {
-  //        pbOffset = (PartMode == PART_NxN) ? (nCbS / 2) : nCbS;
-  //        for (j = 0; j < nCbS; j = j + pbOffset)
-  //          for (i = 0; i < nCbS; i = i + pbOffset)
-  //            prev_intra_luma_pred_flag[x0 + i][y0 + j] = ae(v);
-  //        for (j = 0; j < nCbS; j = j + pbOffset)
-  //          for (i = 0; i < nCbS; i = i + pbOffset)
-  //            if (prev_intra_luma_pred_flag[x0 + i][y0 + j])
-  //              mpm_idx[x0 + i][y0 + j] = ae(v);
-  //            else
-  //              rem_intra_luma_pred_mode[x0 + i][y0 + j] = ae(v);
-  //        if (ChromaArrayType == 3)
-  //          for (j = 0; j < nCbS; j = j + pbOffset)
-  //            for (i = 0; i < nCbS; i = i + pbOffset)
-  //              intra_chroma_pred_mode[x0 + i][y0 + j] = ae(v);
-  //        else if (ChromaArrayType != 0)
-  //          intra_chroma_pred_mode[x0][y0] = ae(v);
-  //      }
-  //    } else {
-  //      if (PartMode == PART_2Nx2N)
-  //        prediction_unit(x0, y0, nCbS, nCbS);
-  //      else if (PartMode == PART_2NxN) {
-  //        prediction_unit(x0, y0, nCbS, nCbS / 2);
-  //        prediction_unit(x0, y0 + (nCbS / 2), nCbS, nCbS / 2);
-  //      } else if (PartMode == PART_Nx2N) {
-  //        prediction_unit(x0, y0, nCbS / 2, nCbS);
-  //        prediction_unit(x0 + (nCbS / 2), y0, nCbS / 2, nCbS);
-  //      } else if (PartMode == PART_2NxnU) {
-  //        prediction_unit(x0, y0, nCbS, nCbS / 4);
-  //        prediction_unit(x0, y0 + (nCbS / 4), nCbS, nCbS * 3 / 4);
-  //      } else if (PartMode == PART_2NxnD) {
-  //        prediction_unit(x0, y0, nCbS, nCbS * 3 / 4);
-  //        prediction_unit(x0, y0 + (nCbS * 3 / 4), nCbS, nCbS / 4);
-  //      } else if (PartMode == PART_nLx2N) {
-  //        prediction_unit(x0, y0, nCbS / 4, nCbS);
-  //        prediction_unit(x0 + (nCbS / 4), y0, nCbS * 3 / 4, nCbS);
-  //      } else if (PartMode == PART_nRx2N) {
-  //        prediction_unit(x0, y0, nCbS * 3 / 4, nCbS);
-  //        prediction_unit(x0 + (nCbS * 3 / 4), y0, nCbS / 4, nCbS);
-  //      } else { /* PART_NxN */
-  //        prediction_unit(x0, y0, nCbS / 2, nCbS / 2);
-  //        prediction_unit(x0 + (nCbS / 2), y0, nCbS / 2, nCbS / 2);
-  //        prediction_unit(x0, y0 + (nCbS / 2), nCbS / 2, nCbS / 2);
-  //        prediction_unit(x0 + (nCbS / 2), y0 + (nCbS / 2), nCbS / 2, nCbS / 2);
-  //      }
-  //    }
-  //    if (!pcm_flag[x0][y0]) {
-  //      if (CuPredMode[x0][y0] != MODE_INTRA &&
-  //          !(PartMode == PART_2Nx2N && merge_flag[x0][y0]))
-  //        rqt_root_cbf = ae(v);
-  //      if (rqt_root_cbf) {
-  //        MaxTrafoDepth =
-  //            (CuPredMode[x0][y0] == MODE_INTRA
-  //                 ? (max_transform_hierarchy_depth_intra + IntraSplitFlag)
-  //                 : max_transform_hierarchy_depth_inter);
-  //        transform_tree(x0, y0, x0, y0, log2CbSize, 0, 0);
-  //      }
-  //    }
-  //  }
-  //}
+  if (m_pps->transquant_bypass_enabled_flag)
+    cu_transquant_bypass_flag = 0; //ae(v);
+  if (header->slice_type != HEVC_SLICE_I) {
+    cu_skip_flag[x0][y0] = 0; //ae(v);
+    CuPredMode[x0][y0] = cu_skip_flag[x0][y0] ? MODE_SKIP : MODE_INTER;
+  }
+  int nCbS = (1 << log2CbSize);
+  if (cu_skip_flag[x0][y0])
+    prediction_unit(x0, y0, nCbS, nCbS);
+  else {
+    if (header->slice_type != HEVC_SLICE_I) {
+      int pred_mode_flag = 0; //ae(v);
+      CuPredMode[x0][y0] = pred_mode_flag;
+    }
+    if (m_sps->palette_mode_enabled_flag && CuPredMode[x0][y0] == MODE_INTRA &&
+        log2CbSize <= MaxTbLog2SizeY)
+      palette_mode_flag[x0][y0] = 0; //ae(v);
+    if (palette_mode_flag[x0][y0])
+      palette_coding(x0, y0, nCbS);
+    else {
+      int pcm_flag[32][32] = {0};
+      if (CuPredMode[x0][y0] != MODE_INTRA ||
+          log2CbSize == m_sps->MinCbLog2SizeY) {
+        part_mode = 0; //ae(v);
+        IntraSplitFlag =
+            part_mode == PART_NxN && CuPredMode[x0][y0] == MODE_INTRA;
+      }
+      if (CuPredMode[x0][y0] == MODE_INTRA) {
+        if (PartMode == PART_2Nx2N && m_sps->pcm_enabled_flag &&
+            log2CbSize >= m_sps->log2_min_pcm_luma_coding_block_size &&
+            log2CbSize <= m_sps->log2_max_pcm_luma_coding_block_size)
+          pcm_flag[x0][y0] = 0; //ae(v);
+        if (pcm_flag[x0][y0]) {
+          while (!bs->byte_aligned())
+            int pcm_alignment_zero_bit = 0; //f(1);
+          pcm_sample(x0, y0, log2CbSize);
+        } else {
+          int i, j;
+          int prev_intra_luma_pred_flag[32][32] = {0};
+          int mpm_idx[32][32] = {0};
+          int rem_intra_luma_pred_mode[32][32] = {0};
+          int intra_chroma_pred_mode[32][32] = {0};
+          int pbOffset = (PartMode == PART_NxN) ? (nCbS / 2) : nCbS;
+          for (j = 0; j < nCbS; j = j + pbOffset)
+            for (i = 0; i < nCbS; i = i + pbOffset)
+              prev_intra_luma_pred_flag[x0 + i][y0 + j] = 0; // ae(v);
+          for (j = 0; j < nCbS; j = j + pbOffset)
+            for (i = 0; i < nCbS; i = i + pbOffset)
+              if (prev_intra_luma_pred_flag[x0 + i][y0 + j])
+                mpm_idx[x0 + i][y0 + j] = 0; // ae(v);
+              else
+                rem_intra_luma_pred_mode[x0 + i][y0 + j] = 0; // ae(v);
+          if (m_sps->ChromaArrayType == 3)
+            for (j = 0; j < nCbS; j = j + pbOffset)
+              for (i = 0; i < nCbS; i = i + pbOffset)
+                intra_chroma_pred_mode[x0 + i][y0 + j] = 0; //ae(v);
+          else if (m_sps->ChromaArrayType != 0)
+            intra_chroma_pred_mode[x0][y0] = 0; //ae(v);
+        }
+      } else {
+        if (PartMode == PART_2Nx2N)
+          prediction_unit(x0, y0, nCbS, nCbS);
+        else if (PartMode == PART_2NxN) {
+          prediction_unit(x0, y0, nCbS, nCbS / 2);
+          prediction_unit(x0, y0 + (nCbS / 2), nCbS, nCbS / 2);
+        } else if (PartMode == PART_Nx2N) {
+          prediction_unit(x0, y0, nCbS / 2, nCbS);
+          prediction_unit(x0 + (nCbS / 2), y0, nCbS / 2, nCbS);
+        } else if (PartMode == PART_2NxnU) {
+          prediction_unit(x0, y0, nCbS, nCbS / 4);
+          prediction_unit(x0, y0 + (nCbS / 4), nCbS, nCbS * 3 / 4);
+        } else if (PartMode == PART_2NxnD) {
+          prediction_unit(x0, y0, nCbS, nCbS * 3 / 4);
+          prediction_unit(x0, y0 + (nCbS * 3 / 4), nCbS, nCbS / 4);
+        } else if (PartMode == PART_nLx2N) {
+          prediction_unit(x0, y0, nCbS / 4, nCbS);
+          prediction_unit(x0 + (nCbS / 4), y0, nCbS * 3 / 4, nCbS);
+        } else if (PartMode == PART_nRx2N) {
+          prediction_unit(x0, y0, nCbS * 3 / 4, nCbS);
+          prediction_unit(x0 + (nCbS * 3 / 4), y0, nCbS / 4, nCbS);
+        } else { /* PART_NxN */
+          prediction_unit(x0, y0, nCbS / 2, nCbS / 2);
+          prediction_unit(x0 + (nCbS / 2), y0, nCbS / 2, nCbS / 2);
+          prediction_unit(x0, y0 + (nCbS / 2), nCbS / 2, nCbS / 2);
+          prediction_unit(x0 + (nCbS / 2), y0 + (nCbS / 2), nCbS / 2, nCbS / 2);
+        }
+      }
+      if (!pcm_flag[x0][y0]) {
+        int rqt_root_cbf = 0;
+        if (CuPredMode[x0][y0] != MODE_INTRA &&
+            !(PartMode == PART_2Nx2N && merge_flag[x0][y0]))
+          rqt_root_cbf = 0; //ae(v);
+        if (rqt_root_cbf) {
+          int MaxTrafoDepth =
+              (CuPredMode[x0][y0] == MODE_INTRA
+                   ? (m_sps->max_transform_hierarchy_depth_intra +
+                      IntraSplitFlag)
+                   : m_sps->max_transform_hierarchy_depth_inter);
+          transform_tree(x0, y0, x0, y0, log2CbSize, 0, 0);
+        }
+      }
+    }
+  }
 
   set_ct_depth(m_sps, x0, y0, log2CbSize, ct_depth);
   return 0;
 }
-//
+
 int SliceData::prediction_unit(int x0, int y0, int nPbW, int nPbH) {
-  //  if (cu_skip_flag[x0][y0]) {
-  //    if (MaxNumMergeCand > 1) merge_idx[x0][y0] = ae(v);
-  //  } else { /* MODE_INTER */
-  //    merge_flag[x0][y0] = ae(v);
-  //    if (merge_flag[x0][y0]) {
-  //      if (MaxNumMergeCand > 1) merge_idx[x0][y0] = ae(v);
-  //    } else {
-  //      if (slice_type == B) inter_pred_idc[x0][y0] = ae(v);
-  //      if (inter_pred_idc[x0][y0] != PRED_L1) {
-  //        if (num_ref_idx_l0_active_minus1 > 0) ref_idx_l0[x0][y0] = ae(v);
-  //        mvd_coding(x0, y0, 0);
-  //        mvp_l0_flag[x0][y0] = ae(v);
-  //      }
-  //      if (inter_pred_idc[x0][y0] != PRED_L0) {
-  //        if (num_ref_idx_l1_active_minus1 > 0) ref_idx_l1[x0][y0] = ae(v);
-  //        if (mvd_l1_zero_flag && inter_pred_idc[x0][y0] == PRED_BI) {
-  //          MvdL1[x0][y0][0] = 0, MvdL1[x0][y0][1] = 0;
-  //        } else
-  //          mvd_coding(x0, y0, 1);
-  //        mvp_l1_flag[x0][y0] = ae(v);
-  //      }
-  //    }
-  //  }
+  int inter_pred_idc[32][32] = {{0}};
+  int mvp_l0_flag[32][32] = {{0}};
+  int mvp_l1_flag[32][32] = {{0}};
+  int ref_idx_l0[32][32] = {{0}};
+  int ref_idx_l1[32][32] = {{0}};
+  int MvdL1[32][32][2] = {{0}};
+
+  if (cu_skip_flag[x0][y0]) {
+    if (header->MaxNumMergeCand > 1) merge_idx[x0][y0] = 0; //ae(v);
+  } else {                                                  /* MODE_INTER */
+    merge_flag[x0][y0] = 0;                                 //ae(v);
+    if (merge_flag[x0][y0]) {
+      if (header->MaxNumMergeCand > 1) merge_idx[x0][y0] = 0; //ae(v);
+    } else {
+      if (header->slice_type == HEVC_SLICE_B)
+        inter_pred_idc[x0][y0] = 0; //ae(v);
+      if (inter_pred_idc[x0][y0] != PRED_L1) {
+        if (header->num_ref_idx_l0_active_minus1 > 0)
+          ref_idx_l0[x0][y0] = 0; //ae(v);
+        mvd_coding(x0, y0, 0);
+        mvp_l0_flag[x0][y0] = 0; //ae(v);
+      }
+      if (inter_pred_idc[x0][y0] != PRED_L0) {
+        if (header->num_ref_idx_l1_active_minus1 > 0)
+          ref_idx_l1[x0][y0] = 0; //ae(v);
+        if (header->mvd_l1_zero_flag && inter_pred_idc[x0][y0] == PRED_BI) {
+          MvdL1[x0][y0][0] = 0, MvdL1[x0][y0][1] = 0;
+        } else
+          mvd_coding(x0, y0, 1);
+        mvp_l1_flag[x0][y0] = 0; //ae(v);
+      }
+    }
+  }
   return 0;
 }
-//
+
 int SliceData::pcm_sample(int x0, int y0, int log2CbSize) {
-  //  for (i = 0; i < 1 << (log2CbSize << 1); i++)
-  //    pcm_sample_luma[i] u(v);
-  //  if (ChromaArrayType != 0)
-  //    for (i = 0; i < ((2 << (log2CbSize << 1)) / (SubWidthC * SubHeightC)); i++)
-  //      pcm_sample_chroma[i] u(v);
-  //
+  int i;
+  uint8_t *pcm_sample_luma = new uint8_t[1 << (log2CbSize << 1)];
+  uint8_t *pcm_sample_chroma = new uint8_t[1 << (log2CbSize << 1)];
+  for (i = 0; i < 1 << (log2CbSize << 1); i++)
+    pcm_sample_luma[i] = 0; //u(v); TODO  <24-12-15 18:09:51, YangJing>
+  if (m_sps->ChromaArrayType != 0)
+    for (i = 0; i < ((2 << (log2CbSize << 1)) /
+                     (m_sps->SubWidthC * m_sps->SubHeightC));
+         i++)
+      pcm_sample_chroma[i] = 0; //u(v); TODO  <24-12-15 18:10:24, YangJing>
+
   return 0;
 }
 //

@@ -357,6 +357,9 @@ int SPS::extractParameters(BitStream &bitStream, VPS vpss[MAX_SPS_COUNT]) {
          << pcm_sample_bit_depth_chroma << endl;
     log2_min_pcm_luma_coding_block_size = bs->readUE() + 3;
     log2_diff_max_min_pcm_luma_coding_block_size = bs->readUE();
+    log2_max_pcm_luma_coding_block_size =
+        log2_min_pcm_luma_coding_block_size +
+        log2_diff_max_min_pcm_luma_coding_block_size;
     pcm_loop_filter_disabled_flag = bs->readUn(1);
     cout << "\t指示是否禁用循环滤波器:" << pcm_loop_filter_disabled_flag
          << endl;
@@ -496,7 +499,7 @@ int SPS::sps_range_extension() {
 
 int SPS::sps_scc_extension() {
   int sps_curr_pic_ref_enabled_flag = bs->readUn(1);
-  int palette_mode_enabled_flag = bs->readUn(1);
+  palette_mode_enabled_flag = bs->readUn(1);
 
   if (palette_mode_enabled_flag) {
     int palette_max_size = bs->readUE();

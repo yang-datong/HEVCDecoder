@@ -76,7 +76,7 @@ class SPS {
 
   int MinCbSizeY = 0;
   int32_t MinCbLog2SizeY = 0;
-  int min_cb_width =0;
+  int min_cb_width = 0;
   int min_cb_height = 0;
   int min_tb_width = 0;
   int min_tb_height = 0;
@@ -100,6 +100,8 @@ class SPS {
   int CtbWidthC = 0;
   int CtbHeightC = 0;
 
+  int palette_mode_enabled_flag = 0;
+
   // 指示是否使用量化缩放列表和是否在SPS中携带缩放列表数据。
   int32_t scaling_list_enabled_flag = 0;
   int32_t sps_scaling_list_data_present_flag = 0;
@@ -117,6 +119,7 @@ class SPS {
   int PcmBitDepthC = 0;
 
   int32_t log2_min_pcm_luma_coding_block_size = 0;
+  int32_t log2_max_pcm_luma_coding_block_size = 0;
   int32_t log2_diff_max_min_pcm_luma_coding_block_size = 0;
   // 指示是否禁用循环滤波器。
   int32_t pcm_loop_filter_disabled_flag = 0;

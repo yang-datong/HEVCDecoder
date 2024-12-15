@@ -99,10 +99,38 @@ class SliceData {
   int hls_coding_quadtree(int x0, int y0, int log2_cb_size, int cb_depth);
   int ff_hevc_split_coding_unit_flag_decode(int ct_depth, int x0, int y0);
 
+  enum PredMode {
+    MODE_INTER = 0,
+    MODE_INTRA,
+    MODE_SKIP,
+  };
+
+  enum PartMode {
+    PART_2Nx2N = 0,
+    PART_2NxN = 1,
+    PART_Nx2N = 2,
+    PART_NxN = 3,
+    PART_2NxnU = 4,
+    PART_2NxnD = 5,
+    PART_nLx2N = 6,
+    PART_nRx2N = 7,
+  };
+
   int ctb_left_flag = 0;
   int ctb_up_flag = 0;
   int ctb_up_right_flag = 0;
   int ctb_up_left_flag = 0;
+
+  enum InterPredIdc {
+    PRED_L0 = 0,
+    PRED_L1,
+    PRED_BI,
+};
+
+
+  int cu_skip_flag[32][32] = {{0}};
+  int merge_flag[32][32] = {{0}};
+  int merge_idx[32][32] = {{0}};
 
   /* process表示处理字段，具体处理手段有推流或解码操作 */
   int process_mb_skip_run(int32_t &prevMbSkipped);

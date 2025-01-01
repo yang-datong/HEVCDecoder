@@ -79,7 +79,7 @@ int SliceData::slice_segment_data(BitStream &bitStream, PictureBase &picture,
     // 解析当前CTU（编码树单元）的数据
     coding_tree_unit();
 
-    end_of_slice_segment_flag = false; //TODO ae(v);
+    end_of_slice_segment_flag = cabac->ff_decode_terminate(); // ae(v);
 
     // 当前片段还没有结束
     if (!end_of_slice_segment_flag) {
@@ -95,14 +95,13 @@ int SliceData::slice_segment_data(BitStream &bitStream, PictureBase &picture,
         goto check;
 
     check:
-      int end_of_subset_one_bit = 0; // TODO ae(v);
+      int end_of_subset_one_bit = cabac->ff_decode_terminate(); // ae(v);
       bs->byte_alignment();
     }
-    /* TODO YangJing 9999去掉  <24-10-22 09:11:36> */
     CtbAddrInTs++;
     /* TODO YangJing 暂时先解码一个CTU验证CABAC <25-01-01 02:05:15> */
     exit(0);
-  } while (!end_of_slice_segment_flag && CtbAddrInTs <= 9999);
+  } while (!end_of_slice_segment_flag);
   return 0;
 }
 
@@ -120,26 +119,10 @@ static inline int av_size_mult(size_t a, size_t b, size_t *r) {
   return 0;
 }
 
-void *av_malloc(size_t size) {
-  void *ptr = NULL;
-  ptr = malloc(size);
-  if (!ptr && !size) {
-    size = 1;
-    ptr = av_malloc(1);
-  }
-  return ptr;
-}
-void *av_malloc_array(size_t nmemb, size_t size) {
-  size_t result;
-  if (av_size_mult(nmemb, size, &result) < 0) return NULL;
-  return av_malloc(result);
-}
-
 #define BOUNDARY_LEFT_SLICE (1 << 0)
 #define BOUNDARY_LEFT_TILE (1 << 1)
 #define BOUNDARY_UPPER_SLICE (1 << 2)
 #define BOUNDARY_UPPER_TILE (1 << 3)
-
 void SliceData::hls_decode_neighbour(int x_ctb, int y_ctb, int ctb_addr_ts) {
   int ctb_size = 1 << m_sps->CtbLog2SizeY;
   int ctb_addr_rs = m_pps->CtbAddrTsToRs[ctb_addr_ts];
@@ -202,6 +185,8 @@ void SliceData::hls_decode_neighbour(int x_ctb, int y_ctb, int ctb_addr_ts) {
 //6.4.1 Derivation process for z-scan order block availability
 int SliceData::derivation_z_scan_order_block_availability(int xCurr, int yCurr,
                                                           int xNbY, int yNbY) {
+  std::cout << "Into -> " << __FUNCTION__ << "():" << __LINE__ << std::endl;
+  exit(0);
   //int minBlockAddrCurr =
   //MinTbAddrZs[xCurr >> MinTbLog2SizeY][yCurr >> MinTbLog2SizeY];
 
@@ -242,6 +227,8 @@ int SliceData::derivation_z_scan_order_block_availability(int xCurr, int yCurr,
 
 //6.5.2 Z-scan order array initialization process
 int SliceData::Z_scan_order_array_initialization() {
+  std::cout << "Into -> " << __FUNCTION__ << "():" << __LINE__ << std::endl;
+  exit(0);
   int MinTbAddrZs[32][32];
   //for (int y = 0; y < (m_sps->PicHeightInCtbsY
   //<< (m_sps->CtbLog2SizeY - m_sps->MinTbLog2SizeY));
@@ -282,6 +269,8 @@ int SliceData::coding_tree_unit() {
 }
 
 int SliceData::sao(int32_t rx, int32_t ry) {
+  std::cout << "Into -> " << __FUNCTION__ << "():" << __LINE__ << std::endl;
+  exit(0);
   int sao_merge_left_flag = 0;
   if (rx > 0) {
     int leftCtbInSliceSeg = CtbAddrInRs > header->SliceAddrRs;
@@ -301,7 +290,11 @@ int SliceData::sao(int32_t rx, int32_t ry) {
         m_pps->TileId[CtbAddrInTs] ==
         m_pps->TileId[m_pps->CtbAddrRsToTs[CtbAddrInRs -
                                            m_sps->PicWidthInCtbsY]];
-    if (upCtbInSliceSeg && upCtbInTile) sao_merge_up_flag = 0; // = ae(v);
+    if (upCtbInSliceSeg && upCtbInTile) {
+      sao_merge_up_flag =
+          cabac->decode_bin(elem_offset[SAO_MERGE_FLAG]); // ae(v);
+      std::cout << "sao_merge_up_flag:" << sao_merge_up_flag << std::endl;
+    }
   }
 
   int SaoTypeIdx[3][32][32] = {{{0}}};
@@ -356,9 +349,8 @@ void SliceData::set_ct_depth(SPS *sps, int x0, int y0, int log2_cb_size,
   int length = (1 << log2_cb_size) >> sps->log2_min_luma_coding_block_size;
   int x_cb = x0 >> sps->log2_min_luma_coding_block_size;
   int y_cb = y0 >> sps->log2_min_luma_coding_block_size;
-  int y;
 
-  for (y = 0; y < length; y++)
+  for (int y = 0; y < length; y++)
     memset(&tab_ct_depth[(y_cb + y) * sps->min_cb_width + x_cb], ct_depth,
            length);
 }
@@ -412,21 +404,22 @@ int SliceData::coding_quadtree(int x0, int y0, int log2CbSize, int cqtDepth) {
   return 0;
 }
 
-//decode_cu()
-//hls_coding_unit()
 int SliceData::coding_unit(int x0, int y0, int log2CbSize) {
+  static int yangjing = 0;
+  yangjing++;
   int cu_transquant_bypass_flag = false;
   int CuPredMode[32][32] = {{0}};
   int palette_mode_flag[32][32] = {{0}};
   int MaxTbLog2SizeY = m_sps->log2_min_luma_transform_block_size +
                        m_sps->log2_diff_max_min_luma_transform_block_size;
-  int part_mode = 0;
+  int part_mode = PART_2Nx2N;
   int &PartMode = part_mode;
   int IntraSplitFlag = 0;
 
   int x_cb = x0 >> m_sps->log2_min_luma_coding_block_size;
   int y_cb = y0 >> m_sps->log2_min_luma_coding_block_size;
 
+  CuPredMode[x0][y0] = MODE_INTRA;
   cu_skip_flag[x0][y0] = 0;
 
   if (m_pps->transquant_bypass_enabled_flag) {
@@ -483,15 +476,23 @@ int SliceData::coding_unit(int x0, int y0, int log2CbSize) {
           }
           pcm_sample(x0, y0, log2CbSize);
         } else {
+          // NOTE: 帧内预测 ffmepg -> intra_prediction_unit(s, x0, y0, log2CbSize);
           int i, j;
           int prev_intra_luma_pred_flag[32][32] = {0};
           int mpm_idx[32][32] = {0};
           int rem_intra_luma_pred_mode[32][32] = {0};
           int intra_chroma_pred_mode[32][32] = {0};
           int pbOffset = (PartMode == PART_NxN) ? (nCbS / 2) : nCbS;
+          /* 
+[else]split_cu_flag:0,cqtDepth:3
+part_mode:0
+prev_intra_luma_pred_flag:0
+TODO: prev_intra_luma_pred_flag:应该是1
+ */
           for (j = 0; j < nCbS; j = j + pbOffset)
             for (i = 0; i < nCbS; i = i + pbOffset) {
-              prev_intra_luma_pred_flag[x0 + i][y0 + j] = 0; // ae(v);
+              prev_intra_luma_pred_flag[x0 + i][y0 + j] = cabac->decode_bin(
+                  elem_offset[PREV_INTRA_LUMA_PRED_FLAG]); // ae(v);
               std::cout << "prev_intra_luma_pred_flag:"
                         << prev_intra_luma_pred_flag[x0 + i][y0 + j]
                         << std::endl;
@@ -499,26 +500,32 @@ int SliceData::coding_unit(int x0, int y0, int log2CbSize) {
           for (j = 0; j < nCbS; j = j + pbOffset)
             for (i = 0; i < nCbS; i = i + pbOffset)
               if (prev_intra_luma_pred_flag[x0 + i][y0 + j]) {
-                mpm_idx[x0 + i][y0 + j] = 0; // ae(v);
+                mpm_idx[x0 + i][y0 + j] =
+                    cabac->ff_hevc_mpm_idx_decode(); // ae(v);
                 std::cout << "mpm_idx:" << mpm_idx[x0 + i][y0 + j] << std::endl;
               } else {
-                rem_intra_luma_pred_mode[x0 + i][y0 + j] = 0; // ae(v);
+                rem_intra_luma_pred_mode[x0 + i][y0 + j] =
+                    cabac->ff_hevc_rem_intra_luma_pred_mode_decode(); // ae(v);
                 std::cout << "rem_intra_luma_pred_mode:"
                           << rem_intra_luma_pred_mode[x0 + i][y0 + j]
                           << std::endl;
               }
-          if (m_sps->ChromaArrayType == 3)
+          if (m_sps->ChromaArrayType == 3) {
             for (j = 0; j < nCbS; j = j + pbOffset)
               for (i = 0; i < nCbS; i = i + pbOffset) {
-                intra_chroma_pred_mode[x0 + i][y0 + j] = 0; //ae(v);
+                intra_chroma_pred_mode[x0 + 1][y0 + j] =
+                    cabac->ff_hevc_intra_chroma_pred_mode_decode(); //ae(v);
                 std::cout << "intra_chroma_pred_mode:"
-                          << intra_chroma_pred_mode[x0 + i][y0 + j]
+                          << intra_chroma_pred_mode[x0 + 1][y0 + j]
                           << std::endl;
               }
-          else if (m_sps->ChromaArrayType != 0) {
-            intra_chroma_pred_mode[x0][y0] = 0; //ae(v);
-            std::cout << "intra_chroma_pred_mode:"
-                      << intra_chroma_pred_mode[x0][y0] << std::endl;
+          } else if (m_sps->ChromaArrayType != 0) {
+            intra_chroma_pred_mode[x0][y0] =
+                cabac->ff_hevc_intra_chroma_pred_mode_decode(); //ae(v);
+            if (m_sps->ChromaArrayType == 2) {
+              std::cout << "intra_chroma_pred_mode:"
+                        << intra_chroma_pred_mode[x0][y0] << std::endl;
+            }
           }
         }
       } else {
@@ -550,10 +557,11 @@ int SliceData::coding_unit(int x0, int y0, int log2CbSize) {
         }
       }
       if (!pcm_flag[x0][y0]) {
-        int rqt_root_cbf = 0;
+        int rqt_root_cbf = 1;
         if (CuPredMode[x0][y0] != MODE_INTRA &&
             !(PartMode == PART_2Nx2N && merge_flag[x0][y0])) {
-          rqt_root_cbf = 0; //ae(v);
+          rqt_root_cbf =
+              cabac->decode_bin(elem_offset[NO_RESIDUAL_DATA_FLAG]); //ae(v);
           std::cout << "rqt_root_cbf:" << rqt_root_cbf << std::endl;
         }
         if (rqt_root_cbf) {
@@ -585,6 +593,8 @@ int SliceData::prediction_unit(int x0, int y0, int nPbW, int nPbH) {
       merge_idx[x0][y0] =
           cabac->ff_hevc_merge_idx_decode(header->MaxNumMergeCand); //ae(v);
       std::cout << "merge_idx:" << merge_idx[x0][y0] << std::endl;
+    } else {
+      merge_idx[x0][y0] = 0;
     }
   } else { /* MODE_INTER */
     merge_flag[x0][y0] = cabac->decode_bin(elem_offset[MERGE_FLAG]); //ae(v);
@@ -596,25 +606,38 @@ int SliceData::prediction_unit(int x0, int y0, int nPbW, int nPbH) {
         std::cout << "merge_idx[x0][y0]:" << merge_idx[x0][y0] << std::endl;
       }
     } else {
-      if (header->slice_type == HEVC_SLICE_B)
+      if (header->slice_type == HEVC_SLICE_B) {
         inter_pred_idc[x0][y0] =
             cabac->ff_hevc_inter_pred_idc_decode(nPbW, nPbH, ct_depth); //ae(v);
+        std::cout << "inter_pred_idc[x0][y0]:" << inter_pred_idc[x0][y0]
+                  << std::endl;
+      }
       if (inter_pred_idc[x0][y0] != PRED_L1) {
         if (header->num_ref_idx_l0_active_minus1 > 0) {
-          ref_idx_l0[x0][y0] = 0;
-          //cabac->ff_hevc_ref_idx_lx_decode(header->nb_refs[L0]); //ae(v);
+          /* TODO YangJing 这里传入num_ref_idx_l0_active_minus1 + 1? <25-01-01 21:01:54> */
+          ref_idx_l0[x0][y0] = cabac->ff_hevc_ref_idx_lx_decode(
+              header->num_ref_idx_l0_active_minus1); //ae(v);
+          std::cout << "ref_idx_l0[x0][y0]:" << ref_idx_l0[x0][y0] << std::endl;
         }
         mvd_coding(x0, y0, 0);
-        mvp_l0_flag[x0][y0] = 0; //ae(v);
+        mvp_l0_flag[x0][y0] =
+            cabac->decode_bin(elem_offset[MVP_LX_FLAG]); //ae(v);
+        std::cout << "mvp_l0_flag[x0][y0]:" << mvp_l0_flag[x0][y0] << std::endl;
       }
       if (inter_pred_idc[x0][y0] != PRED_L0) {
-        if (header->num_ref_idx_l1_active_minus1 > 0)
-          ref_idx_l1[x0][y0] = 0; //ae(v);
+        if (header->num_ref_idx_l1_active_minus1 > 0) {
+          /* TODO YangJing 这里传入num_ref_idx_l0_active_minus1 + 1? <25-01-01 21:01:54> */
+          ref_idx_l1[x0][y0] = cabac->ff_hevc_ref_idx_lx_decode(
+              header->num_ref_idx_l1_active_minus1); //ae(v);
+          std::cout << "ref_idx_l1[x0][y0]:" << ref_idx_l1[x0][y0] << std::endl;
+        }
         if (header->mvd_l1_zero_flag && inter_pred_idc[x0][y0] == PRED_BI) {
           MvdL1[x0][y0][0] = 0, MvdL1[x0][y0][1] = 0;
         } else
           mvd_coding(x0, y0, 1);
-        mvp_l1_flag[x0][y0] = 0; //ae(v);
+        mvp_l1_flag[x0][y0] =
+            cabac->decode_bin(elem_offset[MVP_LX_FLAG]); //ae(v);
+        std::cout << "mvp_l1_flag[x0][y0]:" << mvp_l1_flag[x0][y0] << std::endl;
       }
     }
   }
@@ -622,6 +645,8 @@ int SliceData::prediction_unit(int x0, int y0, int nPbW, int nPbH) {
 }
 
 int SliceData::pcm_sample(int x0, int y0, int log2CbSize) {
+  std::cout << "Into -> " << __FUNCTION__ << "():" << __LINE__ << std::endl;
+  exit(0);
   int i;
   uint8_t *pcm_sample_luma = new uint8_t[1 << (log2CbSize << 1)];
   uint8_t *pcm_sample_chroma = new uint8_t[1 << (log2CbSize << 1)];
@@ -639,6 +664,7 @@ int SliceData::pcm_sample(int x0, int y0, int log2CbSize) {
 int SliceData::transform_tree(int x0, int y0, int xBase, int yBase,
                               int log2TrafoSize, int trafoDepth, int blkIdx) {
   std::cout << "Into -> " << __FUNCTION__ << "():" << __LINE__ << std::endl;
+  exit(0);
   //  if (log2TrafoSize <= MaxTbLog2SizeY && log2TrafoSize > MinTbLog2SizeY &&
   //      trafoDepth < MaxTrafoDepth && !(IntraSplitFlag && (trafoDepth == 0)))
   //    split_transform_flag[x0][y0][trafoDepth] = ae(v);
@@ -726,6 +752,7 @@ int SliceData::mvd_coding(int x0, int y0, int refList) {
 int SliceData::transform_unit(int x0, int y0, int xBase, int yBase,
                               int log2TrafoSize, int trafoDepth, int blkIdx) {
   std::cout << "Into -> " << __FUNCTION__ << "():" << __LINE__ << std::endl;
+  exit(0);
   //  log2TrafoSizeC = Max(2, log2TrafoSize - (ChromaArrayType == 3 ? 0 : 1));
   //  cbfDepthC = trafoDepth - (ChromaArrayType != 3 && log2TrafoSize == 2 ? 1 : 0);
   //  xC = (ChromaArrayType != 3 && log2TrafoSize == 2) ? xBase : x0;
@@ -781,6 +808,7 @@ int SliceData::transform_unit(int x0, int y0, int xBase, int yBase,
 
 int SliceData::residual_coding(int x0, int y0, int log2TrafoSize, int cIdx) {
   std::cout << "Into -> " << __FUNCTION__ << "():" << __LINE__ << std::endl;
+  exit(0);
   //  if (transform_skip_enabled_flag && !cu_transquant_bypass_flag &&
   //      (log2TrafoSize <= Log2MaxTransformSkipSize))
   //    transform_skip_flag[x0][y0][cIdx] = ae(v);
@@ -892,14 +920,15 @@ int SliceData::residual_coding(int x0, int y0, int log2TrafoSize, int cIdx) {
 }
 //
 int SliceData::cross_comp_pred(int x0, int y0, int c) {
-  std::cout << "Into -> " << __FUNCTION__ << "():" << __LINE__ << std::endl;
-  //  log2_res_scale_abs_plus1[c] = ae(v);
-  //  if (log2_res_scale_abs_plus1[c] != 0) res_scale_sign_flag[c] = ae(v);
+  log2_res_scale_abs_plus1[c] = cabac->ff_hevc_log2_res_scale_abs(c); //ae(v);
+  if (log2_res_scale_abs_plus1[c] != 0)
+    res_scale_sign_flag[c] = cabac->ff_hevc_res_scale_sign_flag(c); // ae(v);
   return 0;
 }
 //
 int SliceData::palette_coding(int x0, int y0, int nCbS) {
   std::cout << "Into -> " << __FUNCTION__ << "():" << __LINE__ << std::endl;
+  exit(0);
   //  palettePredictionFinished = 0;
   //  NumPredictedPaletteEntries = 0;
   //  for (predictorEntryIdx = 0;
@@ -1016,6 +1045,8 @@ int SliceData::palette_coding(int x0, int y0, int nCbS) {
 }
 //
 int SliceData::delta_qp() {
+  std::cout << "Into -> " << __FUNCTION__ << "():" << __LINE__ << std::endl;
+  exit(0);
   //  if (cu_qp_delta_enabled_flag && !IsCuQpDeltaCoded) {
   //    IsCuQpDeltaCoded = 1;
   //    cu_qp_delta_abs = ae(v);
@@ -1028,6 +1059,8 @@ int SliceData::delta_qp() {
 }
 //
 int SliceData::chroma_qp_offset() {
+  std::cout << "Into -> " << __FUNCTION__ << "():" << __LINE__ << std::endl;
+  exit(0);
   //  if (cu_chroma_qp_offset_enabled_flag && !IsCuChromaQpOffsetCoded) {
   //    cu_chroma_qp_offset_flag = ae(v);
   //    if (cu_chroma_qp_offset_flag && chroma_qp_offset_list_len_minus1 > 0)

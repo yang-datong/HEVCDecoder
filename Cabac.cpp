@@ -2272,9 +2272,8 @@ int Cabac::ff_decodeDecision(int32_t ctxIdx, int32_t &binVal) {
   ivlCurrRange -= codIRangeLPS;
   lps_mask = ((ivlCurrRange << (CABAC_BITS + 1)) - ivlOffset) >> 31;
 
-  printf("ivlOffset:%d\n", ivlOffset);
+  //printf("ivlOffset:%d\n", ivlOffset);
   ivlOffset -= (ivlCurrRange << (CABAC_BITS + 1)) & lps_mask;
-  printf("ivlOffset:%d\n", ivlOffset);
   ivlCurrRange += (codIRangeLPS - ivlCurrRange) & lps_mask;
 
   pStateIdx ^= lps_mask;
@@ -2286,10 +2285,10 @@ int Cabac::ff_decodeDecision(int32_t ctxIdx, int32_t &binVal) {
   ivlOffset <<= lps_mask;
   if (!(ivlOffset & CABAC_MASK)) refill2();
   binVal = bit;
-  printf("pStateIdx:%d\n", pStateIdx);
-  printf("codIRangeLPS:%d\n", codIRangeLPS);
-  printf("ivlOffset:%d\n", ivlOffset);
-  printf("ivlCurrRange:%d\n", ivlCurrRange);
+  //printf("pStateIdx:%d\n", pStateIdx);
+  //printf("codIRangeLPS:%d\n", codIRangeLPS);
+  //printf("ivlOffset:%d\n", ivlOffset);
+  //printf("ivlCurrRange:%d\n", ivlCurrRange);
   return 0;
 }
 
@@ -2553,6 +2552,69 @@ int Cabac::decode_bin(int32_t ctxIdx) {
   return bin;
 }
 
+void Cabac::refill() {
+  ivlOffset += (bytestream[0] << 9) + (bytestream[1] << 1);
+  ivlOffset -= CABAC_MASK;
+  if (bytestream < bytestream_end) bytestream += CABAC_BITS / 8;
+}
+
+int Cabac::ff_decode_bypass() {
+  int range;
+  ivlOffset += ivlOffset;
+
+  if (!(ivlOffset & CABAC_MASK)) refill();
+
+  range = ivlCurrRange << (CABAC_BITS + 1);
+  if (ivlOffset < range) {
+    return 0;
+  } else {
+    ivlOffset -= range;
+    return 1;
+  }
+}
+
+int Cabac::ff_hevc_mpm_idx_decode() {
+  int i = 0;
+  while (i < 2 && ff_decode_bypass())
+    i++;
+  return i;
+}
+
+int Cabac::ff_hevc_rem_intra_luma_pred_mode_decode() {
+  int i;
+  int value = ff_decode_bypass();
+
+  for (i = 0; i < 4; i++)
+    value = (value << 1) | ff_decode_bypass();
+  return value;
+}
+
+void Cabac::renorm_cabac_decoder_once() {
+  int shift = (uint32_t)(ivlCurrRange - 0x100) >> 31;
+  ivlCurrRange <<= shift;
+  ivlOffset <<= shift;
+  if (!(ivlOffset & CABAC_MASK)) refill();
+}
+
+int Cabac::ff_decode_terminate() {
+  ivlCurrRange -= 2;
+  if (ivlOffset < ivlCurrRange << (CABAC_BITS + 1)) {
+    renorm_cabac_decoder_once();
+    return 0;
+  } else {
+    return bytestream - bytestream_start;
+  }
+}
+
+int Cabac::ff_hevc_intra_chroma_pred_mode_decode() {
+  int ret;
+  if (!decode_bin(elem_offset[INTRA_CHROMA_PRED_MODE])) return 4;
+
+  ret = ff_decode_bypass() << 1;
+  ret |= ff_decode_bypass();
+  return ret;
+}
+
 int Cabac::ff_hevc_merge_idx_decode(int MaxNumMergeCand) {
   int i = decode_bin(elem_offset[MERGE_IDX]);
 
@@ -2570,6 +2632,15 @@ int Cabac::ff_hevc_inter_pred_idc_decode(int nPbW, int nPbH, int ct_depth) {
   return decode_bin(elem_offset[INTER_PRED_IDC] + 4);
 }
 
+int Cabac::ff_hevc_log2_res_scale_abs(int idx) {
+  int i = 0;
+
+  while (i < 4 && decode_bin(elem_offset[LOG2_RES_SCALE_ABS] + 4 * idx + i))
+    i++;
+
+  return i;
+}
+
 int Cabac::ff_hevc_ref_idx_lx_decode(int num_ref_idx_lx) {
   int i = 0;
   int max = num_ref_idx_lx - 1;
@@ -2578,7 +2649,7 @@ int Cabac::ff_hevc_ref_idx_lx_decode(int num_ref_idx_lx) {
   while (i < max_ctx && decode_bin(elem_offset[REF_IDX_L0] + i))
     i++;
   if (i == 2) {
-    while (i < max && decodeBypass())
+    while (i < max && ff_decode_bypass())
       i++;
   }
 
@@ -2641,15 +2712,6 @@ int Cabac::explicit_rdpcm_flag_decode(int c_idx) {
 
 int Cabac::explicit_rdpcm_dir_flag_decode(int c_idx) {
   return decode_bin(elem_offset[EXPLICIT_RDPCM_DIR_FLAG] + !!c_idx);
-}
-
-int Cabac::ff_hevc_log2_res_scale_abs(int idx) {
-  int i = 0;
-
-  while (i < 4 && decode_bin(elem_offset[LOG2_RES_SCALE_ABS] + 4 * idx + i))
-    i++;
-
-  return i;
 }
 
 int Cabac::ff_hevc_res_scale_sign_flag(int idx) {

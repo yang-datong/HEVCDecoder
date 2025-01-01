@@ -98,6 +98,8 @@ class SliceData {
 
   int hls_coding_quadtree(int x0, int y0, int log2_cb_size, int cb_depth);
   int ff_hevc_split_coding_unit_flag_decode(int ct_depth, int x0, int y0);
+    int log2_res_scale_abs_plus1[32] = {0};
+    int res_scale_sign_flag[32] = {0};
 
   enum PredMode {
     MODE_INTER = 0,

@@ -75,7 +75,7 @@ class Cabac {
                 int32_t &bin);
 
   int decodeDecision(int32_t ctxIdx, int32_t &binVal);
-int ff_decodeDecision(int32_t ctxIdx, int32_t &binVal);
+  int ff_decodeDecision(int32_t ctxIdx, int32_t &binVal);
   // 返回值形式
   int decodeBypass();
   // 参数返回形式
@@ -91,9 +91,17 @@ int ff_decodeDecision(int32_t ctxIdx, int32_t &binVal);
   int decode_sub_mb_type_in_B_slices(int32_t &synElVal);
 
  public:
+  int ff_hevc_mpm_idx_decode();
+int ff_hevc_rem_intra_luma_pred_mode_decode();
+  int ff_hevc_intra_chroma_pred_mode_decode();
   int ff_hevc_merge_idx_decode(int MaxNumMergeCand);
   int decode_cu_skip_flag(int x0, int y0, int x_cb, int y_cb, int ctb_left_flag,
                           int ctb_up_flag, uint8_t skip_flag[32][32]);
+
+  void refill();
+  int ff_decode_bypass();
+  int ff_decode_terminate();
+  void renorm_cabac_decoder_once();
   int decode_bin(int32_t ctxIdx);
   int decode_mb_skip_flag(int32_t currMbAddr, int32_t &synElVal);
   int decode_mb_field_decoding_flag(int32_t &synElVal);

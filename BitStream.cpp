@@ -1,6 +1,16 @@
 #include "BitStream.hpp"
 #include <cstdint>
 
+void BitStream::writeU1(bool b) {
+  if (_bitsLeft == 8) {
+    std::cout << "TODO:还有实现对齐的情况再次写入1,好像目前来说没有意义"
+              << std::endl;
+    exit(0);
+  }
+  _p[0] |= (1 << (_bitsLeft));
+  _bitsLeft++;
+}
+
 bool BitStream::readU1() {
   _bitsLeft--;
   bool b = (_p[0] >> _bitsLeft) & 1;
@@ -180,8 +190,9 @@ int BitStream::rbsp_trailing_bits() {
 #pragma GCC diagnostic pop
 
 int BitStream::byte_alignment() {
-  int alignment_bit_equal_to_one = readU1();
+  //int alignment_bit_equal_to_one = readU1();
+  writeU1(1);
   while (!byte_aligned())
-    readU1();
+    writeU1(0);
   return 0;
 }

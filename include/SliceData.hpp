@@ -160,7 +160,7 @@ class SliceData {
     IHEVC_CAB_CTXT_END = IHEVC_CAB_COEFABS_GRTR2_FLAG + 6
   } IHEVC_CABAC_CTXT_OFFSETS;
 
-  int cu_skip_flag[32][32] = {{0}};
+  uint8_t cu_skip_flag[32][32] = {{0}};
   int merge_flag[32][32] = {{0}};
   int merge_idx[32][32] = {{0}};
 
@@ -199,6 +199,8 @@ class SliceData {
                                  const int &MapUnitsInSliceGroup0);
   int explicit_slice_group_map_type(int32_t *&mapUnitToSliceGroupMap);
 };
+
+
 
 int NextMbAddress(int n, SliceHeader *slice_header);
 

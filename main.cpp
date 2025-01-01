@@ -24,7 +24,8 @@ int main(int argc, char *argv[]) {
   if (argc > 1 && argv[1] != nullptr)
     filePath = argv[1];
   else {
-    filePath = "./test/demo_10_frames.h265";
+    // 一帧：无帧间编码，无运动预测，无P，B，无sao
+    filePath = "./test/demo_10_frames_cut_1_frames.h265";
   }
 
   /* 1. 打开文件、读取NUL、存储NUL的操作 */

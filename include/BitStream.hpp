@@ -32,6 +32,7 @@ class BitStream {
                   H264_MB_PART_PRED_MODE MbPartPredMode);
 
   uint32_t readTE(int32_t r);
+  void writeU1(bool b);
 
   bool endOfBit();
 
@@ -51,6 +52,7 @@ class BitStream {
 
  public:
   uint8_t *getP() { return _p; }
+  uint8_t *setP(uint8_t *p) { _p = p; }
   uint8_t *getEndBuf() { return _endBuf; }
   int getBitsLeft() { return _bitsLeft; }
   bool more_rbsp_data();

@@ -14,7 +14,7 @@ class Cabac {
  private:
   ContextModel3DBuffer *m_cSaoMergeSCModel;
   //上下文变量
-  int preCtxState[HEVC_CONTEXTS] = {0};
+  uint8_t preCtxState[HEVC_CONTEXTS] = {0};
   int valMPSs[HEVC_CONTEXTS] = {0};
   uint8_t pStateIdxs[HEVC_CONTEXTS] = {0};
 
@@ -25,6 +25,10 @@ class Cabac {
   /* 声明为引用，如果Cabac消费了bs流，对应的外层也需要同样被消费 */
   BitStream &bs;
   PictureBase &picture;
+
+  const uint8_t *bytestream_start;
+  const uint8_t *bytestream;
+  const uint8_t *bytestream_end;
 
  public:
   Cabac(BitStream &bitStream, PictureBase &pic) : bs(bitStream), picture(pic){};
@@ -71,6 +75,7 @@ class Cabac {
                 int32_t &bin);
 
   int decodeDecision(int32_t ctxIdx, int32_t &binVal);
+int ff_decodeDecision(int32_t ctxIdx, int32_t &binVal);
   // 返回值形式
   int decodeBypass();
   // 参数返回形式
@@ -86,9 +91,9 @@ class Cabac {
   int decode_sub_mb_type_in_B_slices(int32_t &synElVal);
 
  public:
-  int decode_cu_skip_flag(int32_t ctxIdx, int x0, int y0, int x_cb,
-                               int y_cb, int ctb_left_flag, int ctb_up_flag,
-                               uint8_t *skip_flag);
+  int ff_hevc_merge_idx_decode(int MaxNumMergeCand);
+  int decode_cu_skip_flag(int x0, int y0, int x_cb, int y_cb, int ctb_left_flag,
+                          int ctb_up_flag, uint8_t skip_flag[32][32]);
   int decode_bin(int32_t ctxIdx);
   int decode_mb_skip_flag(int32_t currMbAddr, int32_t &synElVal);
   int decode_mb_field_decoding_flag(int32_t &synElVal);
@@ -129,7 +134,9 @@ class Cabac {
 
  public:
   int initialization_decoding_engine();
+  int ff_initialization_decoding_engine();
   int initialization_context_variables(SliceHeader *header);
+  void ff_initialization_context_variables(SliceHeader *header);
   int initialization_palette_predictor_entries(SPS *sps, PPS *pps);
 
   //typedef struct CABACContext {
@@ -152,6 +159,73 @@ class Cabac {
   //int get_cabac(uint8_t *const state);
   void refill2();
   //uint8_t cabac_state[HEVC_CONTEXTS];
+
+#define CABAC_MAX_BIN 31
+
+  enum PartMode {
+    PART_2Nx2N = 0,
+    PART_2NxN = 1,
+    PART_Nx2N = 2,
+    PART_NxN = 3,
+    PART_2NxnU = 4,
+    PART_2NxnD = 5,
+    PART_nLx2N = 6,
+    PART_nRx2N = 7,
+  };
+
+  int ff_hevc_part_mode_decode(int log2_cb_size, int CuPredMode);
+  int ff_hevc_inter_pred_idc_decode(int nPbW, int nPbH, int ct_depth);
+  int ff_hevc_ref_idx_lx_decode(int num_ref_idx_lx);
+  int ff_hevc_mvp_lx_flag_decode();
+  int ff_hevc_no_residual_syntax_flag_decode();
+  int abs_mvd_greater0_flag_decode();
+  int abs_mvd_greater1_flag_decode();
+  int mvd_decode();
+  int mvd_sign_flag_decode();
+
+  int ff_hevc_split_transform_flag_decode(int log2_trafo_size);
+  int ff_hevc_cbf_cb_cr_decode(int trafo_depth);
+  int ff_hevc_cbf_luma_decode(int trafo_depth);
+  int hevc_transform_skip_flag_decode(int c_idx);
+  int explicit_rdpcm_flag_decode(int c_idx);
+  int explicit_rdpcm_dir_flag_decode(int c_idx);
+  int ff_hevc_log2_res_scale_abs(int idx);
+  int ff_hevc_res_scale_sign_flag(int idx);
+  void last_significant_coeff_xy_prefix_decode(int c_idx, int log2_size,
+                                               int *last_scx_prefix,
+                                               int *last_scy_prefix);
+
+  int last_significant_coeff_suffix_decode(int last_significant_coeff_prefix);
+
+  int significant_coeff_group_flag_decode(int c_idx, int ctx_cg);
+  int significant_coeff_flag_decode(int x_c, int y_c, int offset,
+                                    const uint8_t *ctx_idx_map);
+
+  int significant_coeff_flag_decode_0(int c_idx, int offset);
+
+  int coeff_abs_level_greater1_flag_decode(int c_idx, int inc);
+
+  int coeff_abs_level_greater2_flag_decode(int c_idx, int inc);
+
+  int coeff_abs_level_remaining_decode(int rc_rice_param);
+
+  int coeff_sign_flag_decode(uint8_t nb);
+
+  enum ScanType {
+    SCAN_DIAG = 0,
+    SCAN_HORIZ,
+    SCAN_VERT,
+  };
+  enum InterPredIdc {
+    PRED_L0 = 0,
+    PRED_L1,
+    PRED_BI,
+  };
+
+  void ff_hevc_hls_residual_coding(int x0, int y0, int log2_trafo_size,
+                                   enum ScanType scan_idx, int c_idx);
+
+  void ff_hevc_hls_mvd_coding(int x0, int y0, int log2_cb_size);
 };
 
 const int8_t num_bins_in_se[] = {

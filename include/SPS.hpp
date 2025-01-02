@@ -440,6 +440,12 @@ class SPS {
   int32_t log2_max_mv_length_horizontal = 0;
   int32_t log2_max_mv_length_vertical = 0;
 
+  int transform_skip_rotation_enabled_flag = 0;
+  int transform_skip_context_enabled_flag = 0;
+  int implicit_rdpcm_enabled_flag = 0;
+  int explicit_rdpcm_enabled_flag = 0;
+  int extended_precision_processing_flag = 0;
+
  private:
   void vui_parameters();
   void hrd_parameters();

@@ -92,8 +92,8 @@ class Cabac {
 
  public:
   int ff_hevc_mpm_idx_decode();
-int ff_hevc_rem_intra_luma_pred_mode_decode();
-int ff_hevc_cu_qp_delta_abs();
+  int ff_hevc_rem_intra_luma_pred_mode_decode();
+  int ff_hevc_cu_qp_delta_abs();
   int ff_hevc_intra_chroma_pred_mode_decode();
   int ff_hevc_merge_idx_decode(int MaxNumMergeCand);
   int decode_cu_skip_flag(int x0, int y0, int x_cb, int y_cb, int ctb_left_flag,

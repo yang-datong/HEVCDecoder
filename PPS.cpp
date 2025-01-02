@@ -233,8 +233,10 @@ int PPS::scaling_list_data(BitStream &bs) {
 }
 
 int PPS::pps_range_extension(BitStream &bs) {
-  if (transform_skip_enabled_flag)
+  if (transform_skip_enabled_flag) {
     log2_max_transform_skip_block_size_minus2 = bs.readUE();
+    Log2MaxTransformSkipSize = log2_max_transform_skip_block_size_minus2 + 2;
+  }
   cross_component_prediction_enabled_flag = bs.readUn(1);
   chroma_qp_offset_list_enabled_flag = bs.readUn(1);
   if (chroma_qp_offset_list_enabled_flag) {

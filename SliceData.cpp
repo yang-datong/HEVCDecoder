@@ -826,125 +826,162 @@ int SliceData::transform_unit(int x0, int y0, int xBase, int yBase,
 }
 
 int SliceData::residual_coding(int x0, int y0, int log2TrafoSize, int cIdx) {
-  std::cout << "Into -> " << __FUNCTION__ << "():" << __LINE__ << std::endl;
+  uint8_t transform_skip_flag[32][32][32] = {0};
+  uint8_t explicit_rdpcm_flag[32][32][32] = {0};
+  uint8_t explicit_rdpcm_dir_flag[32][32][32] = {0};
+  int last_sig_coeff_x_prefix, last_sig_coeff_y_prefix, last_sig_coeff_x_suffix,
+      last_sig_coeff_y_suffix;
+  int xS, yS, xC, yC;
+
+  if (m_pps->transform_skip_enabled_flag && !cu_transquant_bypass_flag &&
+      (log2TrafoSize <= m_pps->Log2MaxTransformSkipSize))
+    transform_skip_flag[x0][y0][cIdx] =
+        cabac->decode_bin(elem_offset[TRANSFORM_SKIP_FLAG] + !!cIdx);
+
+  if (CuPredMode[x0][y0] == MODE_INTER && m_sps->explicit_rdpcm_enabled_flag &&
+      (transform_skip_flag[x0][y0][cIdx] || cu_transquant_bypass_flag)) {
+    explicit_rdpcm_flag[x0][y0][cIdx] =
+        cabac->decode_bin(elem_offset[EXPLICIT_RDPCM_FLAG] + !!cIdx); //ae(v);
+    if (explicit_rdpcm_flag[x0][y0][cIdx])
+      explicit_rdpcm_dir_flag[x0][y0][cIdx] = cabac->decode_bin(
+          elem_offset[EXPLICIT_RDPCM_DIR_FLAG] + !!cIdx); //ae(v);
+  }
+
+  last_sig_coeff_x_prefix; //ae(v);
+  last_sig_coeff_y_prefix; //ae(v);
+  cabac->last_significant_coeff_xy_prefix_decode(
+      cIdx, log2TrafoSize, &last_sig_coeff_x_prefix, &last_sig_coeff_y_prefix);
+  if (last_sig_coeff_x_prefix > 3) {
+    int suffix =
+        cabac->last_significant_coeff_suffix_decode(last_sig_coeff_x_prefix);
+    last_sig_coeff_x_suffix = (1 << ((last_sig_coeff_x_prefix >> 1) - 1)) *
+                                  (2 + (last_sig_coeff_x_prefix & 1)) +
+                              suffix; //ae(v);
+  }
+  if (last_sig_coeff_y_prefix > 3) {
+    int suffix =
+        cabac->last_significant_coeff_suffix_decode(last_sig_coeff_y_prefix);
+    last_sig_coeff_y_suffix = (1 << ((last_sig_coeff_y_prefix >> 1) - 1)) *
+                                  (2 + (last_sig_coeff_y_prefix & 1)) +
+                              suffix;
+  }
+
+  int lastScanPos = 16;
+  int lastSubBlock =
+      (1 << (log2TrafoSize - 2)) * (1 << (log2TrafoSize - 2)) - 1;
   exit(0);
-  //  if (transform_skip_enabled_flag && !cu_transquant_bypass_flag &&
-  //      (log2TrafoSize <= Log2MaxTransformSkipSize))
-  //    transform_skip_flag[x0][y0][cIdx] = ae(v);
-  //  if (CuPredMode[x0][y0] == MODE_INTER && explicit_rdpcm_enabled_flag &&
-  //      (transform_skip_flag[x0][y0][cIdx] || cu_transquant_bypass_flag)) {
-  //    explicit_rdpcm_flag[x0][y0][cIdx] = ae(v);
-  //    if (explicit_rdpcm_flag[x0][y0][cIdx])
-  //      explicit_rdpcm_dir_flag[x0][y0][cIdx] = ae(v);
-  //  }
-  //  last_sig_coeff_x_prefix = ae(v);
-  //  last_sig_coeff_y_prefix = ae(v);
-  //  if (last_sig_coeff_x_prefix > 3) last_sig_coeff_x_suffix = ae(v);
-  //  if (last_sig_coeff_y_prefix > 3) last_sig_coeff_y_suffix = ae(v);
-  //  lastScanPos = 16;
-  //  lastSubBlock = (1 << (log2TrafoSize - 2)) * (1 << (log2TrafoSize - 2)) - 1;
-  //  do {
-  //    if (lastScanPos == 0) {
-  //      lastScanPos = 16;
-  //      lastSubBlock--;
-  //    }
-  //    lastScanPos--;
-  //    xS = ScanOrder[log2TrafoSize - 2][scanIdx][lastSubBlock][0];
-  //    yS = ScanOrder[log2TrafoSize - 2][scanIdx][lastSubBlock][1];
-  //    xC = (xS << 2) + ScanOrder[2][scanIdx][lastScanPos][0];
-  //    yC = (yS << 2) + ScanOrder[2][scanIdx][lastScanPos][1];
-  //  } while ((xC != LastSignificantCoeffX) || (yC != LastSignificantCoeffY));
-  //  for (i = lastSubBlock; i >= 0; i--) {
-  //    xS = ScanOrder[log2TrafoSize - 2][scanIdx][i][0];
-  //    yS = ScanOrder[log2TrafoSize - 2][scanIdx][i][1];
-  //    escapeDataPresent = 0;
-  //    inferSbDcSigCoeffFlag = 0;
-  //    if ((i < lastSubBlock) && (i > 0)) {
-  //      coded_sub_block_flag[xS][yS] = ae(v);
-  //      inferSbDcSigCoeffFlag = 1;
-  //    }
-  //    for (n = (i == lastSubBlock) ? lastScanPos - 1 : 15; n >= 0; n--) {
-  //      xC = (xS << 2) + ScanOrder[2][scanIdx][n][0];
-  //      yC = (yS << 2) + ScanOrder[2][scanIdx][n][1];
-  //      if (coded_sub_block_flag[xS][yS] && (n > 0 || !inferSbDcSigCoeffFlag)) {
-  //        sig_coeff_flag[xC][yC] = ae(v);
-  //        if (sig_coeff_flag[xC][yC]) inferSbDcSigCoeffFlag = 0;
-  //      }
-  //    }
-  //    firstSigScanPos = 16;
-  //    lastSigScanPos = -1;
-  //    numGreater1Flag = 0;
-  //    lastGreater1ScanPos = -1;
-  //    for (n = 15; n >= 0; n--) {
-  //      xC = (xS << 2) + ScanOrder[2][scanIdx][n][0];
-  //      yC = (yS << 2) + ScanOrder[2][scanIdx][n][1];
-  //      if (sig_coeff_flag[xC][yC]) {
-  //        if (numGreater1Flag < 8) {
-  //          coeff_abs_level_greater1_flag[n] = ae(v);
-  //          numGreater1Flag++;
-  //          if (coeff_abs_level_greater1_flag[n] && lastGreater1ScanPos == -1)
-  //            lastGreater1ScanPos = n;
-  //          else if (coeff_abs_level_greater1_flag[n])
-  //            escapeDataPresent = 1;
-  //        } else
-  //          escapeDataPresent = 1;
-  //        if (lastSigScanPos == -1) lastSigScanPos = n;
-  //        firstSigScanPos = n
-  //      }
-  //    }
-  //    if (cu_transquant_bypass_flag ||
-  //        (CuPredMode[x0][y0] == MODE_INTRA && implicit_rdpcm_enabled_flag &&
-  //         transform_skip_flag[x0][y0][cIdx] &&
-  //         (predModeIntra == 10 || predModeIntra == 26)) ||
-  //        explicit_rdpcm_flag[x0][y0][cIdx])
-  //      signHidden = 0;
-  //    else
-  //      signHidden = lastSigScanPos - firstSigScanPos > 3;
-  //    if (lastGreater1ScanPos != -1) {
-  //      coeff_abs_level_greater2_flag[lastGreater1ScanPos] = ae(v);
-  //      if (coeff_abs_level_greater2_flag[lastGreater1ScanPos])
-  //        escapeDataPresent = 1;
-  //    }
-  //    for (n = 15; n >= 0; n--) {
-  //      xC = (xS << 2) + ScanOrder[2][scanIdx][n][0];
-  //      yC = (yS << 2) + ScanOrder[2][scanIdx][n][1];
-  //      if (sig_coeff_flag[xC][yC] && (!sign_data_hiding_enabled_flag ||
-  //                                     !signHidden || (n != firstSigScanPos)))
-  //        coeff_sign_flag[n] = ae(v);
-  //    }
-  //    numSigCoeff = 0, sumAbsLevel = 0;
-  //    for (n = 15; n >= 0; n--) {
-  //      xC = (xS << 2) + ScanOrder[2][scanIdx][n][0];
-  //      yC = (yS << 2) + ScanOrder[2][scanIdx][n][1];
-  //      if (sig_coeff_flag[xC][yC]) {
-  //        baseLevel = 1 + coeff_abs_level_greater1_flag[n] +
-  //                    coeff_abs_level_greater2_flag[n];
-  //        if (baseLevel ==
-  //            ((numSigCoeff < 8) ? ((n == lastGreater1ScanPos) ? 3 : 2) : 1))
-  //          coeff_abs_level_remaining[n] = ae(v);
-  //        TransCoeffLevel[x0][y0][cIdx][xC][yC] =
-  //            (coeff_abs_level_remaining[n] + baseLevel) *
-  //            (1 - 2 * coeff_sign_flag[n]);
-  //        if (sign_data_hiding_enabled_flag && signHidden) {
-  //          sumAbsLevel += (coeff_abs_level_remaining[n] + baseLevel);
-  //          if ((n == firstSigScanPos) && ((sumAbsLevel % 2) == 1))
-  //            TransCoeffLevel[x0][y0][cIdx][xC][yC] =
-  //                -TransCoeffLevel[x0][y0][cIdx][xC][yC];
-  //        }
-  //        numSigCoeff++;
-  //      }
-  //    }
-  //  }
+  /* TODO YangJing  <25-01-02 21:37:41> */
+#if 0
+  do {
+    if (lastScanPos == 0) {
+      lastScanPos = 16;
+      lastSubBlock--;
+    }
+    lastScanPos--;
+    xS = ScanOrder[log2TrafoSize - 2][scanIdx][lastSubBlock][0];
+    yS = ScanOrder[log2TrafoSize - 2][scanIdx][lastSubBlock][1];
+    xC = (xS << 2) + ScanOrder[2][scanIdx][lastScanPos][0];
+    yC = (yS << 2) + ScanOrder[2][scanIdx][lastScanPos][1];
+  } while ((xC != LastSignificantCoeffX) || (yC != LastSignificantCoeffY));
+
+  int i, n;
+  uint8_t coded_sub_block_flag[32][32] = {0};
+  uint8_t sig_coeff_flag[32][32] = {0};
+  uint8_t coeff_abs_level_greater1_flag[15] = {0};
+  for (i = lastSubBlock; i >= 0; i--) {
+    xS = ScanOrder[log2TrafoSize - 2][scanIdx][i][0];
+    yS = ScanOrder[log2TrafoSize - 2][scanIdx][i][1];
+    int escapeDataPresent = 0;
+    int inferSbDcSigCoeffFlag = 0;
+    if ((i < lastSubBlock) && (i > 0)) {
+      coded_sub_block_flag[xS][yS] = ae(v);
+      inferSbDcSigCoeffFlag = 1;
+    }
+    for (n = (i == lastSubBlock) ? lastScanPos - 1 : 15; n >= 0; n--) {
+      xC = (xS << 2) + ScanOrder[2][scanIdx][n][0];
+      yC = (yS << 2) + ScanOrder[2][scanIdx][n][1];
+      if (coded_sub_block_flag[xS][yS] && (n > 0 || !inferSbDcSigCoeffFlag)) {
+        sig_coeff_flag[xC][yC] = ae(v);
+        if (sig_coeff_flag[xC][yC]) inferSbDcSigCoeffFlag = 0;
+      }
+    }
+    int firstSigScanPos = 16;
+    int lastSigScanPos = -1;
+    int numGreater1Flag = 0;
+    int lastGreater1ScanPos = -1;
+    for (n = 15; n >= 0; n--) {
+      xC = (xS << 2) + ScanOrder[2][scanIdx][n][0];
+      yC = (yS << 2) + ScanOrder[2][scanIdx][n][1];
+      if (sig_coeff_flag[xC][yC]) {
+        if (numGreater1Flag < 8) {
+          coeff_abs_level_greater1_flag[n] = ae(v);
+          numGreater1Flag++;
+          if (coeff_abs_level_greater1_flag[n] && lastGreater1ScanPos == -1)
+            lastGreater1ScanPos = n;
+          else if (coeff_abs_level_greater1_flag[n])
+            escapeDataPresent = 1;
+        } else
+          escapeDataPresent = 1;
+        if (lastSigScanPos == -1) lastSigScanPos = n;
+        firstSigScanPos = n;
+      }
+    }
+    int signHidden;
+    if (cu_transquant_bypass_flag ||
+        (CuPredMode[x0][y0] == MODE_INTRA &&
+         m_sps->implicit_rdpcm_enabled_flag &&
+         transform_skip_flag[x0][y0][cIdx] &&
+         (predModeIntra == 10 || predModeIntra == 26)) ||
+        explicit_rdpcm_flag[x0][y0][cIdx])
+      signHidden = 0;
+    else
+      signHidden = lastSigScanPos - firstSigScanPos > 3;
+    if (lastGreater1ScanPos != -1) {
+      coeff_abs_level_greater2_flag[lastGreater1ScanPos] = ae(v);
+      if (coeff_abs_level_greater2_flag[lastGreater1ScanPos])
+        escapeDataPresent = 1;
+    }
+    for (n = 15; n >= 0; n--) {
+      xC = (xS << 2) + ScanOrder[2][scanIdx][n][0];
+      yC = (yS << 2) + ScanOrder[2][scanIdx][n][1];
+      if (sig_coeff_flag[xC][yC] && (!sign_data_hiding_enabled_flag ||
+                                     !signHidden || (n != firstSigScanPos)))
+        coeff_sign_flag[n] = ae(v);
+    }
+    numSigCoeff = 0, sumAbsLevel = 0;
+    for (n = 15; n >= 0; n--) {
+      xC = (xS << 2) + ScanOrder[2][scanIdx][n][0];
+      yC = (yS << 2) + ScanOrder[2][scanIdx][n][1];
+      if (sig_coeff_flag[xC][yC]) {
+        baseLevel = 1 + coeff_abs_level_greater1_flag[n] +
+                    coeff_abs_level_greater2_flag[n];
+        if (baseLevel ==
+            ((numSigCoeff < 8) ? ((n == lastGreater1ScanPos) ? 3 : 2) : 1))
+          coeff_abs_level_remaining[n] = ae(v);
+        TransCoeffLevel[x0][y0][cIdx][xC][yC] =
+            (coeff_abs_level_remaining[n] + baseLevel) *
+            (1 - 2 * coeff_sign_flag[n]);
+        if (sign_data_hiding_enabled_flag && signHidden) {
+          sumAbsLevel += (coeff_abs_level_remaining[n] + baseLevel);
+          if ((n == firstSigScanPos) && ((sumAbsLevel % 2) == 1))
+            TransCoeffLevel[x0][y0][cIdx][xC][yC] =
+                -TransCoeffLevel[x0][y0][cIdx][xC][yC];
+        }
+        numSigCoeff++;
+      }
+    }
+  }
+#endif
   return 0;
 }
-//
+
 int SliceData::cross_comp_pred(int x0, int y0, int c) {
   log2_res_scale_abs_plus1[c] = cabac->ff_hevc_log2_res_scale_abs(c); //ae(v);
   if (log2_res_scale_abs_plus1[c] != 0)
     res_scale_sign_flag[c] = cabac->ff_hevc_res_scale_sign_flag(c); // ae(v);
   return 0;
 }
-//
+
 int SliceData::palette_coding(int x0, int y0, int nCbS) {
   std::cout << "Into -> " << __FUNCTION__ << "():" << __LINE__ << std::endl;
   exit(0);

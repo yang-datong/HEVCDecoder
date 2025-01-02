@@ -459,11 +459,11 @@ int SPS::scaling_list_data() {
 }
 
 int SPS::sps_range_extension() {
-  int transform_skip_rotation_enabled_flag = bs->readUn(1);
-  int transform_skip_context_enabled_flag = bs->readUn(1);
-  int implicit_rdpcm_enabled_flag = bs->readUn(1);
-  int explicit_rdpcm_enabled_flag = bs->readUn(1);
-  int extended_precision_processing_flag = bs->readUn(1);
+  transform_skip_rotation_enabled_flag = bs->readUn(1);
+  transform_skip_context_enabled_flag = bs->readUn(1);
+  implicit_rdpcm_enabled_flag = bs->readUn(1);
+  explicit_rdpcm_enabled_flag = bs->readUn(1);
+  extended_precision_processing_flag = bs->readUn(1);
   {
     int CoeffMinY =
         -(1 << (extended_precision_processing_flag ? MAX(15, BitDepthY + 6)

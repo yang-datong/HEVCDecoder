@@ -100,6 +100,7 @@ class PPS {
   int32_t diff_cu_chroma_qp_offset_depth = 0;
 
   int log2_max_transform_skip_block_size_minus2 = 0;
+  int Log2MaxTransformSkipSize = 0;
   int cross_component_prediction_enabled_flag = 0;
   int cb_qp_offset_list[32] = {0};
   int cr_qp_offset_list[32] = {0};

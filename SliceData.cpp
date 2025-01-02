@@ -362,7 +362,7 @@ int SliceData::coding_quadtree(int x0, int y0, int log2CbSize, int cqtDepth) {
 
   this->ct_depth = cqtDepth;
   int split_cu_flag[32][32] = {{0}};
-  int IsCuQpDeltaCoded = 0, CuQpDeltaVal = 0, IsCuChromaQpOffsetCoded = 0;
+  IsCuQpDeltaCoded = 0, CuQpDeltaVal = 0, IsCuChromaQpOffsetCoded = 0;
 
   int Log2MinCuChromaQpOffsetSize =
       m_sps->CtbLog2SizeY - m_pps->diff_cu_chroma_qp_offset_depth;
@@ -407,14 +407,14 @@ int SliceData::coding_quadtree(int x0, int y0, int log2CbSize, int cqtDepth) {
 int SliceData::coding_unit(int x0, int y0, int log2CbSize) {
   static int yangjing = 0;
   yangjing++;
-  int cu_transquant_bypass_flag = false;
-  int CuPredMode[32][32] = {{0}};
+  cu_transquant_bypass_flag = false;
+  //CuPredMode[32][32] = {{0}};
   int palette_mode_flag[32][32] = {{0}};
-  int MaxTbLog2SizeY = m_sps->log2_min_luma_transform_block_size +
-                       m_sps->log2_diff_max_min_luma_transform_block_size;
+  MaxTbLog2SizeY = m_sps->log2_min_luma_transform_block_size +
+                   m_sps->log2_diff_max_min_luma_transform_block_size;
   int part_mode = PART_2Nx2N;
   int &PartMode = part_mode;
-  int IntraSplitFlag = 0;
+  IntraSplitFlag = 0;
 
   int x_cb = x0 >> m_sps->log2_min_luma_coding_block_size;
   int y_cb = y0 >> m_sps->log2_min_luma_coding_block_size;
@@ -480,8 +480,8 @@ int SliceData::coding_unit(int x0, int y0, int log2CbSize) {
           int i, j;
           int prev_intra_luma_pred_flag[32][32] = {0};
           int mpm_idx[32][32] = {0};
-          int rem_intra_luma_pred_mode[32][32] = {0};
-          int intra_chroma_pred_mode[32][32] = {0};
+          rem_intra_luma_pred_mode[32][32] = {0};
+          intra_chroma_pred_mode[32][32] = {0};
           int pbOffset = (PartMode == PART_NxN) ? (nCbS / 2) : nCbS;
           /* 
 [else]split_cu_flag:0,cqtDepth:3
@@ -565,11 +565,10 @@ TODO: prev_intra_luma_pred_flag:应该是1
           std::cout << "rqt_root_cbf:" << rqt_root_cbf << std::endl;
         }
         if (rqt_root_cbf) {
-          int MaxTrafoDepth =
-              (CuPredMode[x0][y0] == MODE_INTRA
-                   ? (m_sps->max_transform_hierarchy_depth_intra +
-                      IntraSplitFlag)
-                   : m_sps->max_transform_hierarchy_depth_inter);
+          MaxTrafoDepth = (CuPredMode[x0][y0] == MODE_INTRA
+                               ? (m_sps->max_transform_hierarchy_depth_intra +
+                                  IntraSplitFlag)
+                               : m_sps->max_transform_hierarchy_depth_inter);
           transform_tree(x0, y0, x0, y0, log2CbSize, 0, 0);
         }
       }
@@ -663,41 +662,51 @@ int SliceData::pcm_sample(int x0, int y0, int log2CbSize) {
 
 int SliceData::transform_tree(int x0, int y0, int xBase, int yBase,
                               int log2TrafoSize, int trafoDepth, int blkIdx) {
-  std::cout << "Into -> " << __FUNCTION__ << "():" << __LINE__ << std::endl;
-  exit(0);
-  //  if (log2TrafoSize <= MaxTbLog2SizeY && log2TrafoSize > MinTbLog2SizeY &&
-  //      trafoDepth < MaxTrafoDepth && !(IntraSplitFlag && (trafoDepth == 0)))
-  //    split_transform_flag[x0][y0][trafoDepth] = ae(v);
-  //  if ((log2TrafoSize > 2 && ChromaArrayType != 0) || ChromaArrayType == 3) {
-  //    if (trafoDepth == 0 || cbf_cb[xBase][yBase][trafoDepth - 1]) {
-  //      cbf_cb[x0][y0][trafoDepth] = ae(v);
-  //      if (ChromaArrayType == 2 &&
-  //          (!split_transform_flag[x0][y0][trafoDepth] || log2TrafoSize == 3))
-  //        cbf_cb[x0][y0 + (1 << (log2TrafoSize - 1))][trafoDepth] = ae(v);
-  //    }
-  //    if (trafoDepth == 0 || cbf_cr[xBase][yBase][trafoDepth - 1]) {
-  //      cbf_cr[x0][y0][trafoDepth] = ae(v);
-  //      if (ChromaArrayType == 2 &&
-  //          (!split_transform_flag[x0][y0][trafoDepth] || log2TrafoSize == 3))
-  //        cbf_cr[x0][y0 + (1 << (log2TrafoSize - 1))][trafoDepth] = ae(v);
-  //    }
-  //  }
-  //  if (split_transform_flag[x0][y0][trafoDepth]) {
-  //    x1 = x0 + (1 << (log2TrafoSize - 1));
-  //    y1 = y0 + (1 << (log2TrafoSize - 1));
-  //    transform_tree(x0, y0, x0, y0, log2TrafoSize - 1, trafoDepth + 1, 0);
-  //    transform_tree(x1, y0, x0, y0, log2TrafoSize - 1, trafoDepth + 1, 1);
-  //    transform_tree(x0, y1, x0, y0, log2TrafoSize - 1, trafoDepth + 1, 2);
-  //    transform_tree(x1, y1, x0, y0, log2TrafoSize - 1, trafoDepth + 1, 3);
-  //  } else {
-  //    if (CuPredMode[x0][y0] == MODE_INTRA || trafoDepth != 0 ||
-  //        cbf_cb[x0][y0][trafoDepth] || cbf_cr[x0][y0][trafoDepth] ||
-  //        (ChromaArrayType == 2 &&
-  //         (cbf_cb[x0][y0 + (1 << (log2TrafoSize - 1))][trafoDepth] ||
-  //          cbf_cr[x0][y0 + (1 << (log2TrafoSize - 1))][trafoDepth])))
-  //      cbf_luma[x0][y0][trafoDepth] = ae(v);
-  //    transform_unit(x0, y0, xBase, yBase, log2TrafoSize, trafoDepth, blkIdx);
-  //  }
+  int MinTbLog2SizeY = m_sps->log2_min_luma_transform_block_size;
+
+  if (log2TrafoSize <= MaxTbLog2SizeY && log2TrafoSize > MinTbLog2SizeY &&
+      trafoDepth < MaxTrafoDepth && !(IntraSplitFlag && (trafoDepth == 0))) {
+    split_transform_flag[x0][y0][trafoDepth] = cabac->decode_bin(
+        elem_offset[SPLIT_TRANSFORM_FLAG] + 5 - log2TrafoSize); // ae(v);
+    std::cout << "split_transform_flag[x0][y0][trafoDepth]:"
+              << split_transform_flag[x0][y0][trafoDepth] << std::endl;
+  }
+  if ((log2TrafoSize > 2 && m_sps->ChromaArrayType != 0) ||
+      m_sps->ChromaArrayType == 3) {
+    if (trafoDepth == 0 || cbf_cb[xBase][yBase][trafoDepth - 1]) {
+      cbf_cb[x0][y0][trafoDepth] =
+          cabac->decode_bin(elem_offset[CBF_CB_CR] + trafoDepth); // ae(v);
+      if (m_sps->ChromaArrayType == 2 &&
+          (!split_transform_flag[x0][y0][trafoDepth] || log2TrafoSize == 3))
+        cbf_cb[x0][y0 + (1 << (log2TrafoSize - 1))][trafoDepth] =
+            cabac->decode_bin(elem_offset[CBF_CB_CR] + trafoDepth); // ae(v);
+    }
+    if (trafoDepth == 0 || cbf_cr[xBase][yBase][trafoDepth - 1]) {
+      cbf_cr[x0][y0][trafoDepth] =
+          cabac->decode_bin(elem_offset[CBF_CB_CR] + trafoDepth); // ae(v);
+      if (m_sps->ChromaArrayType == 2 &&
+          (!split_transform_flag[x0][y0][trafoDepth] || log2TrafoSize == 3))
+        cbf_cr[x0][y0 + (1 << (log2TrafoSize - 1))][trafoDepth] =
+            cabac->decode_bin(elem_offset[CBF_CB_CR] + trafoDepth); // ae(v);
+    }
+  }
+  if (split_transform_flag[x0][y0][trafoDepth]) {
+    int x1 = x0 + (1 << (log2TrafoSize - 1));
+    int y1 = y0 + (1 << (log2TrafoSize - 1));
+    transform_tree(x0, y0, x0, y0, log2TrafoSize - 1, trafoDepth + 1, 0);
+    transform_tree(x1, y0, x0, y0, log2TrafoSize - 1, trafoDepth + 1, 1);
+    transform_tree(x0, y1, x0, y0, log2TrafoSize - 1, trafoDepth + 1, 2);
+    transform_tree(x1, y1, x0, y0, log2TrafoSize - 1, trafoDepth + 1, 3);
+  } else {
+    if (CuPredMode[x0][y0] == MODE_INTRA || trafoDepth != 0 ||
+        cbf_cb[x0][y0][trafoDepth] || cbf_cr[x0][y0][trafoDepth] ||
+        (m_sps->ChromaArrayType == 2 &&
+         (cbf_cb[x0][y0 + (1 << (log2TrafoSize - 1))][trafoDepth] ||
+          cbf_cr[x0][y0 + (1 << (log2TrafoSize - 1))][trafoDepth])))
+      cbf_luma[x0][y0][trafoDepth] =
+          cabac->decode_bin(elem_offset[CBF_LUMA] + !trafoDepth); //ae(v);
+    transform_unit(x0, y0, xBase, yBase, log2TrafoSize, trafoDepth, blkIdx);
+  }
   return 0;
 }
 
@@ -751,58 +760,68 @@ int SliceData::mvd_coding(int x0, int y0, int refList) {
 
 int SliceData::transform_unit(int x0, int y0, int xBase, int yBase,
                               int log2TrafoSize, int trafoDepth, int blkIdx) {
-  std::cout << "Into -> " << __FUNCTION__ << "():" << __LINE__ << std::endl;
-  exit(0);
-  //  log2TrafoSizeC = Max(2, log2TrafoSize - (ChromaArrayType == 3 ? 0 : 1));
-  //  cbfDepthC = trafoDepth - (ChromaArrayType != 3 && log2TrafoSize == 2 ? 1 : 0);
-  //  xC = (ChromaArrayType != 3 && log2TrafoSize == 2) ? xBase : x0;
-  //  yC = (ChromaArrayType != 3 && log2TrafoSize == 2) ? yBase : y0;
-  //  cbfLuma = cbf_luma[x0][y0][trafoDepth];
-  //  cbfChroma = cbf_cb[xC][yC][cbfDepthC] || cbf_cr[xC][yC][cbfDepthC] ||
-  //              (ChromaArrayType == 2 &&
-  //               (cbf_cb[xC][yC + (1 << log2TrafoSizeC)][cbfDepthC] ||
-  //                cbf_cr[xC][yC + (1 << log2TrafoSizeC)][cbfDepthC]));
-  //  if (cbfLuma || cbfChroma) {
-  //    xP = (x0 >> MinCbLog2SizeY) << MinCbLog2SizeY;
-  //    yP = (y0 >> MinCbLog2SizeY) << MinCbLog2SizeY;
-  //    nCbS = 1 << MinCbLog2SizeY;
-  //    if (residual_adaptive_colour_transform_enabled_flag &&
-  //        (CuPredMode[x0][y0] == MODE_INTER ||
-  //         (PartMode == PART_2Nx2N && intra_chroma_pred_mode[x0][y0] == 4) ||
-  //         (intra_chroma_pred_mode[xP][yP] == 4 &&
-  //          intra_chroma_pred_mode[xP + nCbS / 2][yP] == 4 &&
-  //          intra_chroma_pred_mode[xP][yP + nCbS / 2] == 4 &&
-  //          intra_chroma_pred_mode[xP + nCbS / 2][yP + nCbS / 2] == 4)))
-  //      tu_residual_act_flag[x0][y0] = ae(v);
-  //    delta_qp();
-  //    if (cbfChroma && !cu_transquant_bypass_flag) chroma_qp_offset();
-  //    if (cbfLuma) residual_coding(x0, y0, log2TrafoSize, 0);
-  //    if (log2TrafoSize > 2 || ChromaArrayType == 3) {
-  //      if (cross_component_prediction_enabled_flag && cbfLuma &&
-  //          (CuPredMode[x0][y0] == MODE_INTER ||
-  //           intra_chroma_pred_mode[x0][y0] == 4))
-  //        cross_comp_pred(x0, y0, 0);
-  //      for (tIdx = 0; tIdx < (ChromaArrayType == 2 ? 2 : 1); tIdx++)
-  //        if (cbf_cb[x0][y0 + (tIdx << log2TrafoSizeC)][trafoDepth])
-  //          residual_coding(x0, y0 + (tIdx << log2TrafoSizeC), log2TrafoSizeC, 1);
-  //      if (cross_component_prediction_enabled_flag && cbfLuma &&
-  //          (CuPredMode[x0][y0] == MODE_INTER ||
-  //           intra_chroma_pred_mode[x0][y0] == 4))
-  //        cross_comp_pred(x0, y0, 1);
-  //      for (tIdx = 0; tIdx < (ChromaArrayType == 2 ? 2 : 1); tIdx++)
-  //        if (cbf_cr[x0][y0 + (tIdx << log2TrafoSizeC)][trafoDepth])
-  //          residual_coding(x0, y0 + (tIdx << log2TrafoSizeC), log2TrafoSizeC, 2);
-  //    } else if (blkIdx == 3) {
-  //      for (tIdx = 0; tIdx < (ChromaArrayType == 2 ? 2 : 1); tIdx++)
-  //        if (cbf_cb[xBase][yBase + (tIdx << log2TrafoSizeC)][trafoDepth - 1])
-  //          residual_coding(xBase, yBase + (tIdx << log2TrafoSizeC),
-  //                          log2TrafoSize, 1);
-  //      for (tIdx = 0; tIdx < (ChromaArrayType == 2 ? 2 : 1); tIdx++)
-  //        if (cbf_cr[xBase][yBase + (tIdx << log2TrafoSizeC)][trafoDepth - 1])
-  //          residual_coding(xBase, yBase + (tIdx << log2TrafoSizeC),
-  //                          log2TrafoSize, 2);
-  //    }
-  //  }
+  const int &ChromaArrayType = m_sps->ChromaArrayType;
+  const int &MinCbLog2SizeY = m_sps->MinCbLog2SizeY;
+  int tIdx = 0;
+  int log2TrafoSizeC = MAX(2, log2TrafoSize - (ChromaArrayType == 3 ? 0 : 1));
+  int cbfDepthC =
+      trafoDepth - (ChromaArrayType != 3 && log2TrafoSize == 2 ? 1 : 0);
+  int xC = (ChromaArrayType != 3 && log2TrafoSize == 2) ? xBase : x0;
+  int yC = (ChromaArrayType != 3 && log2TrafoSize == 2) ? yBase : y0;
+  int cbfLuma = cbf_luma[x0][y0][trafoDepth];
+  int cbfChroma = cbf_cb[xC][yC][cbfDepthC] || cbf_cr[xC][yC][cbfDepthC] ||
+                  (ChromaArrayType == 2 &&
+                   (cbf_cb[xC][yC + (1 << log2TrafoSizeC)][cbfDepthC] ||
+                    cbf_cr[xC][yC + (1 << log2TrafoSizeC)][cbfDepthC]));
+  /* TODO YangJing 这里的PartMode是乱写的，后面一定要确定 <25-01-01 22:01:36> */
+  int PartMode = 1;
+
+  if (cbfLuma || cbfChroma) {
+    int xP = (x0 >> MinCbLog2SizeY) << MinCbLog2SizeY;
+    int yP = (y0 >> MinCbLog2SizeY) << MinCbLog2SizeY;
+    int nCbS = 1 << MinCbLog2SizeY;
+    if (m_pps->residual_adaptive_colour_transform_enabled_flag &&
+        (CuPredMode[x0][y0] == MODE_INTER ||
+         (PartMode == PART_2Nx2N && intra_chroma_pred_mode[x0][y0] == 4) ||
+         (intra_chroma_pred_mode[xP][yP] == 4 &&
+          intra_chroma_pred_mode[xP + nCbS / 2][yP] == 4 &&
+          intra_chroma_pred_mode[xP][yP + nCbS / 2] == 4 &&
+          intra_chroma_pred_mode[xP + nCbS / 2][yP + nCbS / 2] == 4))) {
+      /* TODO YangJing  <25-01-01 21:58:43> */
+      //tu_residual_act_flag[x0][y0] = ae(v);
+      std::cout << "Into -> " << __FUNCTION__ << "():" << __LINE__ << std::endl;
+      exit(0);
+    }
+
+    delta_qp();
+    if (cbfChroma && !cu_transquant_bypass_flag) chroma_qp_offset();
+    if (cbfLuma) residual_coding(x0, y0, log2TrafoSize, 0);
+    if (log2TrafoSize > 2 || ChromaArrayType == 3) {
+      if (m_pps->cross_component_prediction_enabled_flag && cbfLuma &&
+          (CuPredMode[x0][y0] == MODE_INTER ||
+           intra_chroma_pred_mode[x0][y0] == 4))
+        cross_comp_pred(x0, y0, 0);
+      for (tIdx = 0; tIdx < (ChromaArrayType == 2 ? 2 : 1); tIdx++)
+        if (cbf_cb[x0][y0 + (tIdx << log2TrafoSizeC)][trafoDepth])
+          residual_coding(x0, y0 + (tIdx << log2TrafoSizeC), log2TrafoSizeC, 1);
+      if (m_pps->cross_component_prediction_enabled_flag && cbfLuma &&
+          (CuPredMode[x0][y0] == MODE_INTER ||
+           intra_chroma_pred_mode[x0][y0] == 4))
+        cross_comp_pred(x0, y0, 1);
+      for (tIdx = 0; tIdx < (ChromaArrayType == 2 ? 2 : 1); tIdx++)
+        if (cbf_cr[x0][y0 + (tIdx << log2TrafoSizeC)][trafoDepth])
+          residual_coding(x0, y0 + (tIdx << log2TrafoSizeC), log2TrafoSizeC, 2);
+    } else if (blkIdx == 3) {
+      for (tIdx = 0; tIdx < (ChromaArrayType == 2 ? 2 : 1); tIdx++)
+        if (cbf_cb[xBase][yBase + (tIdx << log2TrafoSizeC)][trafoDepth - 1])
+          residual_coding(xBase, yBase + (tIdx << log2TrafoSizeC),
+                          log2TrafoSize, 1);
+      for (tIdx = 0; tIdx < (ChromaArrayType == 2 ? 2 : 1); tIdx++)
+        if (cbf_cr[xBase][yBase + (tIdx << log2TrafoSizeC)][trafoDepth - 1])
+          residual_coding(xBase, yBase + (tIdx << log2TrafoSizeC),
+                          log2TrafoSize, 2);
+    }
+  }
   return 0;
 }
 
@@ -1045,16 +1064,14 @@ int SliceData::palette_coding(int x0, int y0, int nCbS) {
 }
 //
 int SliceData::delta_qp() {
-  std::cout << "Into -> " << __FUNCTION__ << "():" << __LINE__ << std::endl;
-  exit(0);
-  //  if (cu_qp_delta_enabled_flag && !IsCuQpDeltaCoded) {
-  //    IsCuQpDeltaCoded = 1;
-  //    cu_qp_delta_abs = ae(v);
-  //    if (cu_qp_delta_abs) {
-  //      cu_qp_delta_sign_flag = ae(v);
-  //      CuQpDeltaVal = cu_qp_delta_abs * (1 − 2 * cu_qp_delta_sign_flag);
-  //    }
-  //  }
+  if (m_pps->cu_qp_delta_enabled_flag && !IsCuQpDeltaCoded) {
+    IsCuQpDeltaCoded = 1;
+    int cu_qp_delta_abs = cabac->ff_hevc_cu_qp_delta_abs(); //ae(v);
+    if (cu_qp_delta_abs) {
+      int cu_qp_delta_sign_flag = cabac->ff_decode_bypass(); //ae(v);
+      CuQpDeltaVal = cu_qp_delta_abs * (1 - 2 * cu_qp_delta_sign_flag);
+    }
+  }
   return 0;
 }
 //

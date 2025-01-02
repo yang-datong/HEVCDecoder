@@ -2718,6 +2718,31 @@ int Cabac::ff_hevc_res_scale_sign_flag(int idx) {
   return decode_bin(elem_offset[RES_SCALE_SIGN_FLAG] + idx);
 }
 
+int Cabac::ff_hevc_cu_qp_delta_abs() {
+  int prefix_val = 0;
+  int suffix_val = 0;
+  int inc = 0;
+
+  while (prefix_val < 5 && decode_bin(elem_offset[CU_QP_DELTA] + inc)) {
+    prefix_val++;
+    inc = 1;
+  }
+  if (prefix_val >= 5) {
+    int k = 0;
+    while (k < 7 && ff_decode_bypass()) {
+      suffix_val += 1 << k;
+      k++;
+    }
+    if (k == 7) {
+      return -1;
+    }
+
+    while (k--)
+      suffix_val += ff_decode_bypass() << k;
+  }
+  return prefix_val + suffix_val;
+}
+
 void Cabac::last_significant_coeff_xy_prefix_decode(int c_idx, int log2_size,
                                                     int *last_scx_prefix,
                                                     int *last_scy_prefix) {

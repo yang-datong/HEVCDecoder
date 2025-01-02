@@ -98,8 +98,13 @@ class SliceData {
 
   int hls_coding_quadtree(int x0, int y0, int log2_cb_size, int cb_depth);
   int ff_hevc_split_coding_unit_flag_decode(int ct_depth, int x0, int y0);
-    int log2_res_scale_abs_plus1[32] = {0};
-    int res_scale_sign_flag[32] = {0};
+  int log2_res_scale_abs_plus1[32] = {0};
+  int res_scale_sign_flag[32] = {0};
+  int MaxTbLog2SizeY = 0;
+  int MaxTrafoDepth = 0;
+  int IntraSplitFlag = 0;
+  /* TODO YangJing 这个内存好像有点大 <25-01-01 21:25:43> */
+  uint8_t CuPredMode[32][32] = {0};
 
   enum PredMode {
     MODE_INTER = 0,
@@ -107,6 +112,7 @@ class SliceData {
     MODE_SKIP,
   };
 
+  int IsCuQpDeltaCoded = 0, CuQpDeltaVal = 0, IsCuChromaQpOffsetCoded = 0;
   enum PartMode {
     PART_2Nx2N = 0,
     PART_2NxN = 1,
@@ -163,8 +169,18 @@ class SliceData {
   } IHEVC_CABAC_CTXT_OFFSETS;
 
   uint8_t cu_skip_flag[32][32] = {{0}};
-  int merge_flag[32][32] = {{0}};
-  int merge_idx[32][32] = {{0}};
+  uint8_t merge_flag[32][32] = {{0}};
+  uint8_t merge_idx[32][32] = {{0}};
+
+    uint8_t split_transform_flag[32][32][32] = {0};
+  uint8_t cbf_cb[32][32][32] = {0};
+  uint8_t cbf_cr[32][32][32] = {0};
+  uint8_t cbf_luma[32][32][32] = {0};
+            uint8_t rem_intra_luma_pred_mode[32][32] = {0};
+          uint8_t intra_chroma_pred_mode[32][32] = {0};
+
+  int cu_transquant_bypass_flag = false;
+
 
   /* process表示处理字段，具体处理手段有推流或解码操作 */
   int process_mb_skip_run(int32_t &prevMbSkipped);
@@ -201,8 +217,6 @@ class SliceData {
                                  const int &MapUnitsInSliceGroup0);
   int explicit_slice_group_map_type(int32_t *&mapUnitToSliceGroupMap);
 };
-
-
 
 int NextMbAddress(int n, SliceHeader *slice_header);
 

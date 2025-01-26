@@ -236,6 +236,10 @@ class SliceData {
   int wipe_slice_group_map_types(int32_t *&mapUnitToSliceGroupMap,
                                  const int &MapUnitsInSliceGroup0);
   int explicit_slice_group_map_type(int32_t *&mapUnitToSliceGroupMap);
+  int get_scf_offse(int &scf_offset, const uint8_t *&ctx_idx_map_p,
+                             int transform_skip_flag, int cIdx,
+                             int log2TrafoSize, int x_cg, int y_cg,
+                             int scan_idx, int prev_sig);
 };
 
 int NextMbAddress(int n, SliceHeader *slice_header);

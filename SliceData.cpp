@@ -993,7 +993,13 @@ int SliceData::residual_coding(int x0, int y0, int log2TrafoSize,
   uint8_t coded_sub_block_flag[32][32] = {0};
   uint8_t sig_coeff_flag[32][32] = {0};
   uint8_t coeff_abs_level_greater1_flag[15] = {0};
+
+  int x_cg_last_sig = LastSignificantCoeffX >> 2;
+  int y_cg_last_sig = LastSignificantCoeffY >> 2;
+
   for (i = lastSubBlock; i >= 0; i--) {
+    uint8_t nb_significant_coeff_flag = 0;
+
     xS = ScanOrder[log2TrafoSize - 2][scanIdx][i][0];
     yS = ScanOrder[log2TrafoSize - 2][scanIdx][i][1];
     int escapeDataPresent = 0;
@@ -1004,32 +1010,60 @@ int SliceData::residual_coding(int x0, int y0, int log2TrafoSize,
       inferSbDcSigCoeffFlag = 1;
       std::cout << "Into -> " << __FUNCTION__ << "():" << __LINE__ << std::endl;
       exit(0);
+    } else {
+      //NOTE: 来自ffmpeg，HEVC中没有这段
+      coded_sub_block_flag[xS][yS] =
+          ((xS == x_cg_last_sig && yS == y_cg_last_sig) ||
+           (xS == 0 && yS == 0));
     }
+
+    if (i == lastSubBlock) {
+      nb_significant_coeff_flag = 1;
+    }
+
+    int prev_sig = 0;
+    if (xS < ((1 << log2TrafoSize) - 1) >> 2)
+      prev_sig = !!coded_sub_block_flag[xS + 1][yS];
+    if (yS < ((1 << log2TrafoSize) - 1) >> 2)
+      prev_sig += (!!coded_sub_block_flag[xS][yS + 1] << 1);
+
+    const uint8_t *ctx_idx_map_p;
+    int scf_offset = 0;
+    get_scf_offse(scf_offset, ctx_idx_map_p, transform_skip_flag[x0][y0][cIdx],
+                  cIdx, log2TrafoSize, xS, yS, scanIdx, prev_sig);
+
+    /* TODO YangJing  <25-01-26 16:59:17> */
     for (n = (i == lastSubBlock) ? lastScanPos - 1 : 15; n >= 0; n--) {
       xC = (xS << 2) + ScanOrder[2][scanIdx][n][0];
       yC = (yS << 2) + ScanOrder[2][scanIdx][n][1];
       if (coded_sub_block_flag[xS][yS] && (n > 0 || !inferSbDcSigCoeffFlag)) {
-        std::cout << "Into -> " << __FUNCTION__ << "():" << __LINE__
-                  << std::endl;
-        exit(0);
-        /* TODO YangJing 问题在这里，应该要进入的，但是这里没有进入 <25-01-26 16:41:06> */
-        //sig_coeff_flag[xC][yC] = cabac->significant_coeff_flag_decode(xC,yC,); //ae(v);
-        if (sig_coeff_flag[xC][yC]) inferSbDcSigCoeffFlag = 0;
+        sig_coeff_flag[xC][yC] =
+            cabac->significant_coeff_flag_decode(xC, yC, scf_offset,
+                                                 ctx_idx_map_p); //ae(v);
+        printf("sig_coeff_flag:%d\n", sig_coeff_flag[xC][yC]);
+        if (sig_coeff_flag[xC][yC]) {
+          nb_significant_coeff_flag++;
+          inferSbDcSigCoeffFlag = 0;
+        }
       }
     }
+
+    int ctx_set = (i > 0 && cIdx == 0) ? 2 : 0;
     int firstSigScanPos = 16;
     int lastSigScanPos = -1;
+    int c_rice_param = 0;
     int numGreater1Flag = 0;
     int lastGreater1ScanPos = -1;
+    int greater1_ctx = 1;
+    if (!(i == lastSubBlock) && greater1_ctx == 0) ctx_set++;
     for (n = 15; n >= 0; n--) {
       xC = (xS << 2) + ScanOrder[2][scanIdx][n][0];
       yC = (yS << 2) + ScanOrder[2][scanIdx][n][1];
       if (sig_coeff_flag[xC][yC]) {
         if (numGreater1Flag < 8) {
-          //coeff_abs_level_greater1_flag[n] = ae(v);
-          std::cout << "Into -> " << __FUNCTION__ << "():" << __LINE__
-                    << std::endl;
-          exit(0);
+          int inc = (ctx_set << 2) + greater1_ctx;
+          coeff_abs_level_greater1_flag[n] =
+              cabac->coeff_abs_level_greater1_flag_decode(cIdx, inc); //ae(v);
           numGreater1Flag++;
           if (coeff_abs_level_greater1_flag[n] && lastGreater1ScanPos == -1)
             lastGreater1ScanPos = n;
@@ -1059,9 +1093,8 @@ int SliceData::residual_coding(int x0, int y0, int log2TrafoSize,
     else
       signHidden = lastSigScanPos - firstSigScanPos > 3;
     if (lastGreater1ScanPos != -1) {
-      //coeff_abs_level_greater2_flag[lastGreater1ScanPos] = ae(v);
-      std::cout << "Into -> " << __FUNCTION__ << "():" << __LINE__ << std::endl;
-      exit(0);
+      coeff_abs_level_greater2_flag[lastGreater1ScanPos] =
+          cabac->coeff_abs_level_greater2_flag_decode(cIdx, ctx_set); // ae(v);
       if (coeff_abs_level_greater2_flag[lastGreater1ScanPos])
         escapeDataPresent = 1;
     }
@@ -1071,12 +1104,18 @@ int SliceData::residual_coding(int x0, int y0, int log2TrafoSize,
       yC = (yS << 2) + ScanOrder[2][scanIdx][n][1];
       if (sig_coeff_flag[xC][yC] && (!m_pps->sign_data_hiding_enabled_flag ||
                                      !signHidden || (n != firstSigScanPos))) {
-        std::cout << "Into -> " << __FUNCTION__ << "():" << __LINE__
-                  << std::endl;
-        exit(0);
-        //coeff_sign_flag[n] = ae(v);
+        if (!m_pps->sign_data_hiding_enabled_flag || !signHidden) {
+          coeff_sign_flag[n] =
+              cabac->coeff_sign_flag_decode(nb_significant_coeff_flag)
+              << (16 - nb_significant_coeff_flag); //ae(v);
+        } else {
+          coeff_sign_flag[n] =
+              cabac->coeff_sign_flag_decode(nb_significant_coeff_flag - 1)
+              << (16 - (nb_significant_coeff_flag - 1)); //ae(v);
+        }
       }
     }
+    /* TODO YangJing 做到这里来了，应该是这里的某个变量少了2次cabac解码循环 <25-01-26 17:45:26> */
     int numSigCoeff = 0, sumAbsLevel = 0;
     for (n = 15; n >= 0; n--) {
       xC = (xS << 2) + ScanOrder[2][scanIdx][n][0];
@@ -1086,17 +1125,12 @@ int SliceData::residual_coding(int x0, int y0, int log2TrafoSize,
                         coeff_abs_level_greater2_flag[n];
         if (baseLevel ==
             ((numSigCoeff < 8) ? ((n == lastGreater1ScanPos) ? 3 : 2) : 1)) {
-          //coeff_abs_level_remaining[n] = ae(v);
-          std::cout << "Into -> " << __FUNCTION__ << "():" << __LINE__
-                    << std::endl;
-          exit(0);
+          coeff_abs_level_remaining[n] =
+              cabac->coeff_abs_level_remaining_decode(c_rice_param);
         }
-        std::cout << "Into -> " << __FUNCTION__ << "():" << __LINE__
-                  << std::endl;
-        exit(0);
-        //TransCoeffLevel[x0][y0][cIdx][xC][yC] =
-        //(coeff_abs_level_remaining[n] + baseLevel) *
-        //(1 - 2 * coeff_sign_flag[n]);
+        TransCoeffLevel[x0][y0][cIdx][xC][yC] =
+            (coeff_abs_level_remaining[n] + baseLevel) *
+            (1 - 2 * coeff_sign_flag[n]);
         if (m_pps->sign_data_hiding_enabled_flag && signHidden) {
           sumAbsLevel += (coeff_abs_level_remaining[n] + baseLevel);
           if ((n == firstSigScanPos) && ((sumAbsLevel % 2) == 1))
@@ -1924,5 +1958,48 @@ int SliceData::Traverse_scan_order_array_initialization_process(
         travScan[i][1] = y;
         i++;
       }
+  return 0;
+}
+
+int SliceData::get_scf_offse(int &scf_offset, const uint8_t *&ctx_idx_map_p,
+                             int transform_skip_flag, int cIdx,
+                             int log2TrafoSize, int x_cg, int y_cg,
+                             int scan_idx, int prev_sig) {
+  static const uint8_t ctx_idx_map[] = {
+      0, 1, 4, 5, 2, 3, 4, 5, 6, 6, 8, 8, 7, 7, 8, 8, // log2_trafo_size == 2
+      1, 1, 1, 0, 1, 1, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, // prev_sig == 0
+      2, 2, 2, 2, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, // prev_sig == 1
+      2, 1, 0, 0, 2, 1, 0, 0, 2, 1, 0, 0, 2, 1, 0, 0, // prev_sig == 2
+      2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2  // default
+  };
+  if (m_sps->transform_skip_context_enabled_flag &&
+      (transform_skip_flag || cu_transquant_bypass_flag)) {
+    ctx_idx_map_p = (uint8_t *)&ctx_idx_map[4 * 16];
+    if (cIdx == 0) {
+      scf_offset = 40;
+    } else {
+      scf_offset = 14 + 27;
+    }
+  } else {
+    if (cIdx != 0) scf_offset = 27;
+    if (log2TrafoSize == 2) {
+      ctx_idx_map_p = (uint8_t *)&ctx_idx_map[0];
+    } else {
+      ctx_idx_map_p = (uint8_t *)&ctx_idx_map[(prev_sig + 1) << 4];
+      if (cIdx == 0) {
+        if ((x_cg > 0 || y_cg > 0)) scf_offset += 3;
+        if (log2TrafoSize == 3) {
+          scf_offset += (scan_idx == SCAN_DIAG) ? 9 : 15;
+        } else {
+          scf_offset += 21;
+        }
+      } else {
+        if (log2TrafoSize == 3)
+          scf_offset += 9;
+        else
+          scf_offset += 12;
+      }
+    }
+  }
   return 0;
 }

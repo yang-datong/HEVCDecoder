@@ -187,6 +187,8 @@ class Cabac {
   int ff_hevc_ref_idx_lx_decode(int num_ref_idx_lx);
   int ff_hevc_mvp_lx_flag_decode();
   int ff_hevc_no_residual_syntax_flag_decode();
+  int ff_hevc_cu_chroma_qp_offset_idx(int chroma_qp_offset_list_len_minus1);
+
   int abs_mvd_greater0_flag_decode();
   int abs_mvd_greater1_flag_decode();
   int mvd_decode();

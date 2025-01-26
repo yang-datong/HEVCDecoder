@@ -2269,6 +2269,10 @@ int Cabac::ff_decodeDecision(int32_t ctxIdx, int32_t &binVal) {
   int codIRangeLPS = ff_rangeTabLPS[2 * (ivlCurrRange & 0xC0) + pStateIdx];
   int bit, lps_mask;
 
+  static int yangjing = 0;
+  yangjing++;
+  printf("yangjing:%d\n", yangjing);
+
   ivlCurrRange -= codIRangeLPS;
   lps_mask = ((ivlCurrRange << (CABAC_BITS + 1)) - ivlOffset) >> 31;
 
@@ -2662,6 +2666,17 @@ int Cabac::ff_hevc_mvp_lx_flag_decode() {
 
 int Cabac::ff_hevc_no_residual_syntax_flag_decode() {
   return decode_bin(elem_offset[NO_RESIDUAL_DATA_FLAG]);
+}
+
+int Cabac::ff_hevc_cu_chroma_qp_offset_idx(
+    int chroma_qp_offset_list_len_minus1) {
+  int c_max = MAX(5, chroma_qp_offset_list_len_minus1);
+  int i = 0;
+
+  while (i < c_max && decode_bin(elem_offset[CU_CHROMA_QP_OFFSET_IDX]))
+    i++;
+
+  return i;
 }
 
 int Cabac::abs_mvd_greater0_flag_decode() {

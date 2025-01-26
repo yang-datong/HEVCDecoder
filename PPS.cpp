@@ -241,7 +241,7 @@ int PPS::pps_range_extension(BitStream &bs) {
   chroma_qp_offset_list_enabled_flag = bs.readUn(1);
   if (chroma_qp_offset_list_enabled_flag) {
     diff_cu_chroma_qp_offset_depth = bs.readUE();
-    int chroma_qp_offset_list_len_minus1 = bs.readUE();
+    chroma_qp_offset_list_len_minus1 = bs.readUE();
     for (int i = 0; i <= chroma_qp_offset_list_len_minus1; i++) {
       cb_qp_offset_list[i] = bs.readSE();
       cr_qp_offset_list[i] = bs.readSE();

@@ -1,8 +1,11 @@
 #ifndef SLICEBODY_HPP_OVHTPIZQ
 #define SLICEBODY_HPP_OVHTPIZQ
 #include "BitStream.hpp"
+#include "CU.hpp"
 #include "Cabac.hpp"
+#include "PU.hpp"
 #include "SliceHeader.hpp"
+#include "TU.hpp"
 #include <cstdint>
 #include <cstring>
 
@@ -21,6 +24,10 @@ class SliceData {
     m_pps = nullptr;
   }
 
+  PU m_pu;
+  TU m_tu;
+  CU m_cu;
+
   int coding_tree_unit();
   int sao(int32_t rx, int32_t ry);
   int coding_quadtree(int x0, int y0, int log2CbSize, int cqtDepth);
@@ -32,7 +39,9 @@ class SliceData {
   int mvd_coding(int x0, int y0, int refList);
   int transform_unit(int x0, int y0, int xBase, int yBase, int log2TrafoSize,
                      int trafoDepth, int blkIdx);
-  int residual_coding(int x0, int y0, int log2TrafoSize, int cIdx);
+  //int residual_coding(int x0, int y0, int log2TrafoSize, int cIdx);
+  int residual_coding(int x0, int y0, int log2TrafoSize,
+                      Cabac::ScanType scan_idx, int cIdx);
   int cross_comp_pred(int x0, int y0, int c);
   int palette_coding(int x0, int y0, int nCbS);
   int delta_qp();
@@ -53,6 +62,18 @@ class SliceData {
   int Z_scan_order_array_initialization();
   int derivation_z_scan_order_block_availability(int xCurr, int yCurr, int xNbY,
                                                  int yNbY);
+  int Up_right_diagonal_scan_order_array_initialization_process(
+      int blkSize, uint8_t diagScan[16][2]);
+
+  int Horizontal_scan_order_array_initialization_process(
+      int blkSize, uint8_t diagScan[16][2]);
+
+  int Vertical_scan_order_array_initialization_process(int blkSize,
+                                                       uint8_t diagScan[16][2]);
+
+  int Traverse_scan_order_array_initialization_process(int blkSize,
+                                                       uint8_t diagScan[16][2]);
+
   int ct_depth = 0;
   uint8_t *tab_ct_depth;
   void set_ct_depth(SPS *sps, int x0, int y0, int log2_cb_size, int ct_depth);
@@ -172,15 +193,14 @@ class SliceData {
   uint8_t merge_flag[32][32] = {{0}};
   uint8_t merge_idx[32][32] = {{0}};
 
-    uint8_t split_transform_flag[32][32][32] = {0};
+  uint8_t split_transform_flag[32][32][32] = {0};
   uint8_t cbf_cb[32][32][32] = {0};
   uint8_t cbf_cr[32][32][32] = {0};
   uint8_t cbf_luma[32][32][32] = {0};
-            uint8_t rem_intra_luma_pred_mode[32][32] = {0};
-          uint8_t intra_chroma_pred_mode[32][32] = {0};
+  uint8_t rem_intra_luma_pred_mode[32][32] = {0};
+  uint8_t intra_chroma_pred_mode[32][32] = {0};
 
   int cu_transquant_bypass_flag = false;
-
 
   /* process表示处理字段，具体处理手段有推流或解码操作 */
   int process_mb_skip_run(int32_t &prevMbSkipped);

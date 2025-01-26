@@ -52,7 +52,7 @@ class BitStream {
 
  public:
   uint8_t *getP() { return _p; }
-  uint8_t *setP(uint8_t *p) { _p = p; }
+  void setP(uint8_t *p) { _p = p; }
   uint8_t *getEndBuf() { return _endBuf; }
   int getBitsLeft() { return _bitsLeft; }
   bool more_rbsp_data();

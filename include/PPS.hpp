@@ -205,6 +205,8 @@ class PPS {
   int32_t pic_init_qp_minus26 = 0;
   /* 场景切换(SI,SP Slice)或 B Slice 中帧间预测的量化参数 */
   int32_t pic_init_qs_minus26 = 0;
+
+  int chroma_qp_offset_list_len_minus1 = 0;
 };
 
 #endif /* end of include guard: PPS_CPP_F6QSULFM */

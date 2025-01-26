@@ -4,6 +4,7 @@
 #include "Frame.hpp"
 #include "GOP.hpp"
 #include "MacroBlock.hpp"
+#include "PU.hpp"
 #include "PictureBase.hpp"
 #include "Type.hpp"
 #include <cstdint>
@@ -18,6 +19,9 @@ int SliceData::slice_segment_data(BitStream &bitStream, PictureBase &picture,
   bs = &bitStream;
   m_sps = &sps;
   m_pps = &pps;
+  m_pu = PU();
+  //m_cu = CU();
+  //m_tu = TU();
 
   if (cabac == nullptr) cabac = new Cabac(*bs, *pic);
 
@@ -405,8 +409,6 @@ int SliceData::coding_quadtree(int x0, int y0, int log2CbSize, int cqtDepth) {
 }
 
 int SliceData::coding_unit(int x0, int y0, int log2CbSize) {
-  static int yangjing = 0;
-  yangjing++;
   cu_transquant_bypass_flag = false;
   //CuPredMode[32][32] = {{0}};
   int palette_mode_flag[32][32] = {{0}};
@@ -422,6 +424,12 @@ int SliceData::coding_unit(int x0, int y0, int log2CbSize) {
   CuPredMode[x0][y0] = MODE_INTRA;
   cu_skip_flag[x0][y0] = 0;
 
+  static int yangjing = 0;
+  yangjing++;
+  if (yangjing == 2) {
+    std::cout << "yangjing = " << yangjing << std::endl;
+  }
+
   if (m_pps->transquant_bypass_enabled_flag) {
     cu_transquant_bypass_flag = cabac->decode_bin(IHEVC_CAB_CU_TQ_BYPASS_FLAG);
     std::cout << "cu_transquant_bypass_flag:" << cu_transquant_bypass_flag
@@ -433,7 +441,10 @@ int SliceData::coding_unit(int x0, int y0, int log2CbSize) {
                                    ctb_up_left_flag, cu_skip_flag); //ae(v);
     std::cout << "cu_skip_flag:" << cu_skip_flag[x0][y0] << std::endl;
     CuPredMode[x0][y0] = cu_skip_flag[x0][y0] ? MODE_SKIP : MODE_INTER;
+  } else {
+    /* TODO YangJing ??? <25-01-26 15:24:15> */
   }
+
   int nCbS = (1 << log2CbSize);
   if (cu_skip_flag[x0][y0])
     prediction_unit(x0, y0, nCbS, nCbS);
@@ -460,6 +471,10 @@ int SliceData::coding_unit(int x0, int y0, int log2CbSize) {
         std::cout << "part_mode:" << part_mode << std::endl;
         IntraSplitFlag =
             part_mode == PART_NxN && CuPredMode[x0][y0] == MODE_INTRA;
+
+        if (yangjing == 2) {
+          exit(0);
+        }
       }
       if (CuPredMode[x0][y0] == MODE_INTRA) {
         if (PartMode == PART_2Nx2N && m_sps->pcm_enabled_flag &&
@@ -483,12 +498,6 @@ int SliceData::coding_unit(int x0, int y0, int log2CbSize) {
           rem_intra_luma_pred_mode[32][32] = {0};
           intra_chroma_pred_mode[32][32] = {0};
           int pbOffset = (PartMode == PART_NxN) ? (nCbS / 2) : nCbS;
-          /* 
-[else]split_cu_flag:0,cqtDepth:3
-part_mode:0
-prev_intra_luma_pred_flag:0
-TODO: prev_intra_luma_pred_flag:应该是1
- */
           for (j = 0; j < nCbS; j = j + pbOffset)
             for (i = 0; i < nCbS; i = i + pbOffset) {
               prev_intra_luma_pred_flag[x0 + i][y0 + j] = cabac->decode_bin(
@@ -664,6 +673,25 @@ int SliceData::transform_tree(int x0, int y0, int xBase, int yBase,
                               int log2TrafoSize, int trafoDepth, int blkIdx) {
   int MinTbLog2SizeY = m_sps->log2_min_luma_transform_block_size;
 
+  //初始化后续使用的字段
+  if (IntraSplitFlag) {
+    if (trafoDepth == 1) {
+      m_tu.intra_pred_mode = m_pu.intra_pred_mode[blkIdx];
+      if (m_sps->chroma_format_idc == 3) {
+        m_tu.intra_pred_mode_c = m_pu.intra_pred_mode_c[blkIdx];
+        m_tu.chroma_mode_c = m_pu.intra_chroma_pred_mode[blkIdx];
+      } else {
+        m_tu.intra_pred_mode_c = m_pu.intra_pred_mode_c[0];
+        m_tu.chroma_mode_c = m_pu.intra_chroma_pred_mode[0];
+      }
+    }
+  } else {
+    m_tu.intra_pred_mode = m_pu.intra_pred_mode[0];
+    m_tu.intra_pred_mode_c = m_pu.intra_pred_mode_c[0];
+    m_tu.chroma_mode_c = m_pu.intra_chroma_pred_mode[0];
+  }
+  //}
+
   if (log2TrafoSize <= MaxTbLog2SizeY && log2TrafoSize > MinTbLog2SizeY &&
       trafoDepth < MaxTrafoDepth && !(IntraSplitFlag && (trafoDepth == 0))) {
     split_transform_flag[x0][y0][trafoDepth] = cabac->decode_bin(
@@ -793,9 +821,36 @@ int SliceData::transform_unit(int x0, int y0, int xBase, int yBase,
       exit(0);
     }
 
+    int scan_idx = SCAN_DIAG;
+    int scan_idx_c = SCAN_DIAG;
+
     delta_qp();
-    if (cbfChroma && !cu_transquant_bypass_flag) chroma_qp_offset();
-    if (cbfLuma) residual_coding(x0, y0, log2TrafoSize, 0);
+    if (cbfChroma && !cu_transquant_bypass_flag) {
+      chroma_qp_offset();
+    }
+
+#if 0
+    // For ffmpeg:
+    if (CuPredMode[x0][y0] == MODE_INTRA && log2_trafo_size < 4) {
+      if (lc->tu.intra_pred_mode >= 6 && lc->tu.intra_pred_mode <= 14) {
+        scan_idx = SCAN_VERT;
+      } else if (lc->tu.intra_pred_mode >= 22 && lc->tu.intra_pred_mode <= 30) {
+        scan_idx = SCAN_HORIZ;
+      }
+
+      if (lc->tu.intra_pred_mode_c >= 6 && lc->tu.intra_pred_mode_c <= 14) {
+        scan_idx_c = SCAN_VERT;
+      } else if (lc->tu.intra_pred_mode_c >= 22 &&
+                 lc->tu.intra_pred_mode_c <= 30) {
+        scan_idx_c = SCAN_HORIZ;
+      }
+    }
+
+    lc->tu.cross_pf = 0;
+#endif
+
+    if (cbfLuma)
+      residual_coding(x0, y0, log2TrafoSize, (Cabac::ScanType)scan_idx, 0);
     if (log2TrafoSize > 2 || ChromaArrayType == 3) {
       if (m_pps->cross_component_prediction_enabled_flag && cbfLuma &&
           (CuPredMode[x0][y0] == MODE_INTER ||
@@ -803,34 +858,35 @@ int SliceData::transform_unit(int x0, int y0, int xBase, int yBase,
         cross_comp_pred(x0, y0, 0);
       for (tIdx = 0; tIdx < (ChromaArrayType == 2 ? 2 : 1); tIdx++)
         if (cbf_cb[x0][y0 + (tIdx << log2TrafoSizeC)][trafoDepth])
-          residual_coding(x0, y0 + (tIdx << log2TrafoSizeC), log2TrafoSizeC, 1);
+          residual_coding(x0, y0 + (tIdx << log2TrafoSizeC), log2TrafoSizeC,
+                          (Cabac::ScanType)scan_idx, 1);
       if (m_pps->cross_component_prediction_enabled_flag && cbfLuma &&
           (CuPredMode[x0][y0] == MODE_INTER ||
            intra_chroma_pred_mode[x0][y0] == 4))
         cross_comp_pred(x0, y0, 1);
       for (tIdx = 0; tIdx < (ChromaArrayType == 2 ? 2 : 1); tIdx++)
         if (cbf_cr[x0][y0 + (tIdx << log2TrafoSizeC)][trafoDepth])
-          residual_coding(x0, y0 + (tIdx << log2TrafoSizeC), log2TrafoSizeC, 2);
+          residual_coding(x0, y0 + (tIdx << log2TrafoSizeC), log2TrafoSizeC,
+                          (Cabac::ScanType)scan_idx, 2);
     } else if (blkIdx == 3) {
       for (tIdx = 0; tIdx < (ChromaArrayType == 2 ? 2 : 1); tIdx++)
         if (cbf_cb[xBase][yBase + (tIdx << log2TrafoSizeC)][trafoDepth - 1])
           residual_coding(xBase, yBase + (tIdx << log2TrafoSizeC),
-                          log2TrafoSize, 1);
+                          log2TrafoSize, (Cabac::ScanType)scan_idx, 1);
       for (tIdx = 0; tIdx < (ChromaArrayType == 2 ? 2 : 1); tIdx++)
         if (cbf_cr[xBase][yBase + (tIdx << log2TrafoSizeC)][trafoDepth - 1])
           residual_coding(xBase, yBase + (tIdx << log2TrafoSizeC),
-                          log2TrafoSize, 2);
+                          log2TrafoSize, (Cabac::ScanType)scan_idx, 2);
     }
   }
   return 0;
 }
 
-int SliceData::residual_coding(int x0, int y0, int log2TrafoSize, int cIdx) {
+int SliceData::residual_coding(int x0, int y0, int log2TrafoSize,
+                               Cabac::ScanType scanIdx, int cIdx) {
   uint8_t transform_skip_flag[32][32][32] = {0};
   uint8_t explicit_rdpcm_flag[32][32][32] = {0};
   uint8_t explicit_rdpcm_dir_flag[32][32][32] = {0};
-  int last_sig_coeff_x_prefix, last_sig_coeff_y_prefix, last_sig_coeff_x_suffix,
-      last_sig_coeff_y_suffix;
   int xS, yS, xC, yC;
 
   if (m_pps->transform_skip_enabled_flag && !cu_transquant_bypass_flag &&
@@ -842,36 +898,85 @@ int SliceData::residual_coding(int x0, int y0, int log2TrafoSize, int cIdx) {
       (transform_skip_flag[x0][y0][cIdx] || cu_transquant_bypass_flag)) {
     explicit_rdpcm_flag[x0][y0][cIdx] =
         cabac->decode_bin(elem_offset[EXPLICIT_RDPCM_FLAG] + !!cIdx); //ae(v);
-    if (explicit_rdpcm_flag[x0][y0][cIdx])
+    std::cout << "explicit_rdpcm_flag[x0][y0][cIdx]:"
+              << explicit_rdpcm_flag[x0][y0][cIdx] << std::endl;
+    if (explicit_rdpcm_flag[x0][y0][cIdx]) {
       explicit_rdpcm_dir_flag[x0][y0][cIdx] = cabac->decode_bin(
           elem_offset[EXPLICIT_RDPCM_DIR_FLAG] + !!cIdx); //ae(v);
+      std::cout << "explicit_rdpcm_dir_flag[x0][y0][cIdx]:"
+                << explicit_rdpcm_dir_flag[x0][y0][cIdx] << std::endl;
+    }
   }
 
-  last_sig_coeff_x_prefix; //ae(v);
-  last_sig_coeff_y_prefix; //ae(v);
+  int last_sig_coeff_x_prefix; //ae(v);
+  int last_sig_coeff_y_prefix; //ae(v);
+  int last_sig_coeff_x_suffix, last_sig_coeff_y_suffix;
+  int LastSignificantCoeffX, LastSignificantCoeffY;
   cabac->last_significant_coeff_xy_prefix_decode(
       cIdx, log2TrafoSize, &last_sig_coeff_x_prefix, &last_sig_coeff_y_prefix);
+
   if (last_sig_coeff_x_prefix > 3) {
     int suffix =
         cabac->last_significant_coeff_suffix_decode(last_sig_coeff_x_prefix);
-    last_sig_coeff_x_suffix = (1 << ((last_sig_coeff_x_prefix >> 1) - 1)) *
-                                  (2 + (last_sig_coeff_x_prefix & 1)) +
-                              suffix; //ae(v);
+    LastSignificantCoeffX = last_sig_coeff_x_suffix =
+        (1 << ((last_sig_coeff_x_prefix >> 1) - 1)) *
+            (2 + (last_sig_coeff_x_prefix & 1)) +
+        suffix; //ae(v);
+  } else {
+    LastSignificantCoeffX = last_sig_coeff_x_prefix;
   }
   if (last_sig_coeff_y_prefix > 3) {
     int suffix =
         cabac->last_significant_coeff_suffix_decode(last_sig_coeff_y_prefix);
-    last_sig_coeff_y_suffix = (1 << ((last_sig_coeff_y_prefix >> 1) - 1)) *
-                                  (2 + (last_sig_coeff_y_prefix & 1)) +
-                              suffix;
+    LastSignificantCoeffY = last_sig_coeff_y_suffix =
+        (1 << ((last_sig_coeff_y_prefix >> 1) - 1)) *
+            (2 + (last_sig_coeff_y_prefix & 1)) +
+        suffix;
+  } else {
+    LastSignificantCoeffY = last_sig_coeff_y_prefix;
+  }
+  std::cout << "LastSignificantCoeffX:" << LastSignificantCoeffX << std::endl;
+  std::cout << "LastSignificantCoeffY:" << LastSignificantCoeffY << std::endl;
+
+#define FFSWAP(type, a, b)                                                     \
+  do {                                                                         \
+    type SWAP_tmp = b;                                                         \
+    b = a;                                                                     \
+    a = SWAP_tmp;                                                              \
+  } while (0)
+  //When scanIdx is equal to 2, the coordinates are swapped as follows:
+  if (scanIdx == Cabac::SCAN_VERT) {
+    FFSWAP(int, LastSignificantCoeffX, LastSignificantCoeffY);
   }
 
-  int lastScanPos = 16;
+  /* TODO YangJing  <25-01-26 10:03:32> */
+  //ScanOrder[ log2BlockSize ][ scanIdx ][ sPos ][ sComp ]
+  uint8_t ScanOrder[6][4][16][2] = {0};
+
+  //对于从 0 到 3（含）的 log2BlockSize，使用 1 << log2BlockSize 作为输入调用第 6.5.3 节中指定的右上对角线扫描顺序数组初始化过程，并将输出分配给 ScanOrder[ log2BlockSize ][ 0 ] 。
+  //=============================================不确定是否对
+  int log2BlockSize = 0;
+  for (int i = 0; i < 6; ++i) {
+    log2BlockSize = i;
+    if (log2BlockSize >= 0 && log2BlockSize <= 3) {
+      Up_right_diagonal_scan_order_array_initialization_process(
+          1 << log2BlockSize, ScanOrder[log2BlockSize][0]);
+      Horizontal_scan_order_array_initialization_process(
+          1 << log2BlockSize, ScanOrder[log2BlockSize][1]);
+      Vertical_scan_order_array_initialization_process(
+          1 << log2BlockSize, ScanOrder[log2BlockSize][2]);
+    } else {
+      Traverse_scan_order_array_initialization_process(
+          1 << log2BlockSize, ScanOrder[log2BlockSize][3]);
+    }
+  }
+  //=============================================
+
+  // scanIdx等于0指定右上对角扫描顺序，scanIdx等于1指定水平扫描顺序，scanIdx等于2指定垂直扫描顺序，scanIdx等于3指定横向扫描顺序
+  int lastScanPos = 16; //lastScanPos 表示在 4x4 子块内的扫描位置
+  //最后一个子块的索引
   int lastSubBlock =
       (1 << (log2TrafoSize - 2)) * (1 << (log2TrafoSize - 2)) - 1;
-  exit(0);
-  /* TODO YangJing  <25-01-02 21:37:41> */
-#if 0
   do {
     if (lastScanPos == 0) {
       lastScanPos = 16;
@@ -894,14 +999,21 @@ int SliceData::residual_coding(int x0, int y0, int log2TrafoSize, int cIdx) {
     int escapeDataPresent = 0;
     int inferSbDcSigCoeffFlag = 0;
     if ((i < lastSubBlock) && (i > 0)) {
-      coded_sub_block_flag[xS][yS] = ae(v);
+      /* TODO YangJing coded_sub_block_flag用sig_coeff_flag的解码？ <25-01-26 14:30:02> */
+      //coded_sub_block_flag[xS][yS] = cabac->significant_coeff_group_flag_decode(cIdx,ctx_cg); //ae(v);
       inferSbDcSigCoeffFlag = 1;
+      std::cout << "Into -> " << __FUNCTION__ << "():" << __LINE__ << std::endl;
+      exit(0);
     }
     for (n = (i == lastSubBlock) ? lastScanPos - 1 : 15; n >= 0; n--) {
       xC = (xS << 2) + ScanOrder[2][scanIdx][n][0];
       yC = (yS << 2) + ScanOrder[2][scanIdx][n][1];
       if (coded_sub_block_flag[xS][yS] && (n > 0 || !inferSbDcSigCoeffFlag)) {
-        sig_coeff_flag[xC][yC] = ae(v);
+        std::cout << "Into -> " << __FUNCTION__ << "():" << __LINE__
+                  << std::endl;
+        exit(0);
+        /* TODO YangJing 问题在这里，应该要进入的，但是这里没有进入 <25-01-26 16:41:06> */
+        //sig_coeff_flag[xC][yC] = cabac->significant_coeff_flag_decode(xC,yC,); //ae(v);
         if (sig_coeff_flag[xC][yC]) inferSbDcSigCoeffFlag = 0;
       }
     }
@@ -914,7 +1026,10 @@ int SliceData::residual_coding(int x0, int y0, int log2TrafoSize, int cIdx) {
       yC = (yS << 2) + ScanOrder[2][scanIdx][n][1];
       if (sig_coeff_flag[xC][yC]) {
         if (numGreater1Flag < 8) {
-          coeff_abs_level_greater1_flag[n] = ae(v);
+          //coeff_abs_level_greater1_flag[n] = ae(v);
+          std::cout << "Into -> " << __FUNCTION__ << "():" << __LINE__
+                    << std::endl;
+          exit(0);
           numGreater1Flag++;
           if (coeff_abs_level_greater1_flag[n] && lastGreater1ScanPos == -1)
             lastGreater1ScanPos = n;
@@ -926,6 +1041,13 @@ int SliceData::residual_coding(int x0, int y0, int log2TrafoSize, int cIdx) {
         firstSigScanPos = n;
       }
     }
+
+    int predModeIntra =
+        (cIdx == 0) ? m_tu.intra_pred_mode : m_tu.intra_pred_mode_c;
+
+    uint8_t coeff_abs_level_greater2_flag[32] = {0};
+    uint8_t coeff_abs_level_remaining[32] = {0};
+    uint8_t TransCoeffLevel[8][8][8][8][8] = {0};
     int signHidden;
     if (cu_transquant_bypass_flag ||
         (CuPredMode[x0][y0] == MODE_INTRA &&
@@ -937,31 +1059,45 @@ int SliceData::residual_coding(int x0, int y0, int log2TrafoSize, int cIdx) {
     else
       signHidden = lastSigScanPos - firstSigScanPos > 3;
     if (lastGreater1ScanPos != -1) {
-      coeff_abs_level_greater2_flag[lastGreater1ScanPos] = ae(v);
+      //coeff_abs_level_greater2_flag[lastGreater1ScanPos] = ae(v);
+      std::cout << "Into -> " << __FUNCTION__ << "():" << __LINE__ << std::endl;
+      exit(0);
       if (coeff_abs_level_greater2_flag[lastGreater1ScanPos])
         escapeDataPresent = 1;
     }
+    uint8_t coeff_sign_flag[16] = {0};
     for (n = 15; n >= 0; n--) {
       xC = (xS << 2) + ScanOrder[2][scanIdx][n][0];
       yC = (yS << 2) + ScanOrder[2][scanIdx][n][1];
-      if (sig_coeff_flag[xC][yC] && (!sign_data_hiding_enabled_flag ||
-                                     !signHidden || (n != firstSigScanPos)))
-        coeff_sign_flag[n] = ae(v);
+      if (sig_coeff_flag[xC][yC] && (!m_pps->sign_data_hiding_enabled_flag ||
+                                     !signHidden || (n != firstSigScanPos))) {
+        std::cout << "Into -> " << __FUNCTION__ << "():" << __LINE__
+                  << std::endl;
+        exit(0);
+        //coeff_sign_flag[n] = ae(v);
+      }
     }
-    numSigCoeff = 0, sumAbsLevel = 0;
+    int numSigCoeff = 0, sumAbsLevel = 0;
     for (n = 15; n >= 0; n--) {
       xC = (xS << 2) + ScanOrder[2][scanIdx][n][0];
       yC = (yS << 2) + ScanOrder[2][scanIdx][n][1];
       if (sig_coeff_flag[xC][yC]) {
-        baseLevel = 1 + coeff_abs_level_greater1_flag[n] +
-                    coeff_abs_level_greater2_flag[n];
+        int baseLevel = 1 + coeff_abs_level_greater1_flag[n] +
+                        coeff_abs_level_greater2_flag[n];
         if (baseLevel ==
-            ((numSigCoeff < 8) ? ((n == lastGreater1ScanPos) ? 3 : 2) : 1))
-          coeff_abs_level_remaining[n] = ae(v);
-        TransCoeffLevel[x0][y0][cIdx][xC][yC] =
-            (coeff_abs_level_remaining[n] + baseLevel) *
-            (1 - 2 * coeff_sign_flag[n]);
-        if (sign_data_hiding_enabled_flag && signHidden) {
+            ((numSigCoeff < 8) ? ((n == lastGreater1ScanPos) ? 3 : 2) : 1)) {
+          //coeff_abs_level_remaining[n] = ae(v);
+          std::cout << "Into -> " << __FUNCTION__ << "():" << __LINE__
+                    << std::endl;
+          exit(0);
+        }
+        std::cout << "Into -> " << __FUNCTION__ << "():" << __LINE__
+                  << std::endl;
+        exit(0);
+        //TransCoeffLevel[x0][y0][cIdx][xC][yC] =
+        //(coeff_abs_level_remaining[n] + baseLevel) *
+        //(1 - 2 * coeff_sign_flag[n]);
+        if (m_pps->sign_data_hiding_enabled_flag && signHidden) {
           sumAbsLevel += (coeff_abs_level_remaining[n] + baseLevel);
           if ((n == firstSigScanPos) && ((sumAbsLevel % 2) == 1))
             TransCoeffLevel[x0][y0][cIdx][xC][yC] =
@@ -971,7 +1107,6 @@ int SliceData::residual_coding(int x0, int y0, int log2TrafoSize, int cIdx) {
       }
     }
   }
-#endif
   return 0;
 }
 
@@ -1111,15 +1246,15 @@ int SliceData::delta_qp() {
   }
   return 0;
 }
-//
+
 int SliceData::chroma_qp_offset() {
-  std::cout << "Into -> " << __FUNCTION__ << "():" << __LINE__ << std::endl;
-  exit(0);
-  //  if (cu_chroma_qp_offset_enabled_flag && !IsCuChromaQpOffsetCoded) {
-  //    cu_chroma_qp_offset_flag = ae(v);
-  //    if (cu_chroma_qp_offset_flag && chroma_qp_offset_list_len_minus1 > 0)
-  //      cu_chroma_qp_offset_idx = ae(v);
-  //  }
+  if (header->cu_chroma_qp_offset_enabled_flag && !IsCuChromaQpOffsetCoded) {
+    int cu_chroma_qp_offset_flag =
+        cabac->decode_bin(elem_offset[CU_CHROMA_QP_OFFSET_FLAG]); //ae(v);
+    if (cu_chroma_qp_offset_flag && m_pps->chroma_qp_offset_list_len_minus1 > 0)
+      int cu_chroma_qp_offset_idx = cabac->ff_hevc_cu_chroma_qp_offset_idx(
+          m_pps->chroma_qp_offset_list_len_minus1); //ae(v);
+  }
   return 0;
 }
 
@@ -1713,5 +1848,81 @@ int SliceData::wipe_slice_group_map_types(int32_t *&mapUnitToSliceGroupMap,
 int SliceData::explicit_slice_group_map_type(int32_t *&mapUnitToSliceGroupMap) {
   for (int i = 0; i < (int)m_sps->PicSizeInMapUnits; i++)
     mapUnitToSliceGroupMap[i] = m_pps->slice_group_id[i];
+  return 0;
+}
+
+//6.5.3 Up-right diagonal scan order array initialization process
+//该过程的输入是块大小 blkSize。
+//该过程的输出是数组 diagScan[ sPos ][ sComp ]。数组索引 sPos 指定扫描位置，范围从 0 到 ( blkSize * blkSize ) − 1。数组索引 sComp 等于 0 指定水平分量，数组索引 sComp 等于 1 指定垂直分量。根据 blkSize 的值，数组 diagScan 的推导如下：
+int SliceData::Up_right_diagonal_scan_order_array_initialization_process(
+    int blkSize, uint8_t diagScan[16][2]) {
+  int i = 0, x = 0, y = 0;
+  bool stopLoop = false;
+  while (!stopLoop) {
+    while (y >= 0) {
+      if (x < blkSize && y < blkSize) {
+        diagScan[i][0] = x;
+        diagScan[i][1] = y;
+        i++;
+      }
+      y--;
+      x++;
+    }
+    y = x;
+    x = 0;
+    if (i >= blkSize * blkSize) stopLoop = true;
+  }
+  return 0;
+}
+
+//6.5.4 Horizontal scan order array initialization process
+//Input to this process is a block size blkSize.
+//Output of this process is the array horScan[ sPos ][ sComp ]. The array index sPos specifies the scan position ranging from 0 to ( blkSize * blkSize ) − 1. The array index sComp equal to 0 specifies the horizontal component and the array index sComp equal to 1 specifies the vertical component. Depending on the value of blkSize, the array horScan is derived as follows:
+int SliceData::Horizontal_scan_order_array_initialization_process(
+    int blkSize, uint8_t horScan[16][2]) {
+  int i = 0;
+  for (int y = 0; y < blkSize; y++)
+    for (int x = 0; x < blkSize; x++) {
+      horScan[i][0] = x;
+      horScan[i][1] = y;
+      i++;
+    }
+  return 0;
+}
+
+//6.5.5 Vertical scan order array initialization process
+//Input to this process is a block size blkSize.
+//Output of this process is the array verScan[ sPos ][ sComp ]. The array index sPos specifies the scan position ranging from 0 to ( blkSize * blkSize ) − 1. The array index sComp equal to 0 specifies the horizontal component and the array index sComp equal to 1 specifies the vertical component. Depending on the value of blkSize, the array verScan is derived as follows:
+int SliceData::Vertical_scan_order_array_initialization_process(
+    int blkSize, uint8_t verScan[16][2]) {
+  int i = 0;
+  for (int x = 0; x < blkSize; x++)
+    for (int y = 0; y < blkSize; y++) {
+      verScan[i][0] = x;
+      verScan[i][1] = y;
+      i++;
+    }
+  return 0;
+}
+
+//6.5.6 Traverse scan order array initialization process
+//Input to this process is a block size blkSize.
+//Output of this process is the array travScan[ sPos ][ sComp ]. The array index sPos specifies the scan position ranging from 0 to ( blkSize * blkSize ) − 1, inclusive. The array index sComp equal to 0 specifies the horizontal component and the array index sComp equal to 1 specifies the vertical component. Depending on the value of blkSize, the array travScan is derived as follows:
+int SliceData::Traverse_scan_order_array_initialization_process(
+    int blkSize, uint8_t travScan[16][2]) {
+  int i = 0;
+  for (int y = 0; y < blkSize; y++)
+    if (y % 2 == 0)
+      for (int x = 0; x < blkSize; x++) {
+        travScan[i][0] = x;
+        travScan[i][1] = y;
+        i++;
+      }
+    else
+      for (int x = blkSize - 1; x >= 0; x--) {
+        travScan[i][0] = x;
+        travScan[i][1] = y;
+        i++;
+      }
   return 0;
 }

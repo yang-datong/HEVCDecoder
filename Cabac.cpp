@@ -1118,60 +1118,6 @@ int Cabac::derivation_ctxIdxInc_for_ref_idx_lX(int32_t is_ref_idx_10,
 }
 
 // 9.3.3.1.1.7 Derivation process of ctxIdxInc for the syntax elements mvd_l0 and mvd_l1
-int Cabac::decode_mvd_lX(int32_t mvd_flag, int32_t mbPartIdx,
-                         int32_t subMbPartIdx, int32_t isChroma,
-                         int32_t &synElVal) {
-  int32_t ctxIdxOffset = 47, ctxIdxInc = 0, ctxIdx = 0;
-  int32_t binVal = 0;
-  int32_t bypassFlag = 0;
-  const int32_t uCoff = 9;
-
-  if (mvd_flag == 0 || mvd_flag == 2) ctxIdxOffset = 40;
-  int32_t is_mvd_10 = (mvd_flag == 0 || mvd_flag == 1) ? 1 : 0;
-  RET(derivation_ctxIdxInc_for_mvd_lX(is_mvd_10, mbPartIdx, subMbPartIdx,
-                                      isChroma, ctxIdxOffset, ctxIdxInc));
-
-  ctxIdx = ctxIdxOffset + ctxIdxInc;
-  RET(decodeBin(bypassFlag, ctxIdx, binVal));
-
-  if (binVal == 0)
-    synElVal = 0;
-  else {
-    synElVal = 1;
-    ctxIdx = ctxIdxOffset + 3;
-    while (binVal == 1 && synElVal < uCoff) {
-      RET(decodeBin(bypassFlag, ctxIdx, binVal));
-      if (binVal == 0) break;
-      synElVal++;
-      if (synElVal <= 4) ctxIdx++;
-    }
-
-    int32_t k = 3;
-    if (synElVal >= uCoff) {
-      RET(decodeBypass(binVal));
-      while (binVal == 1) {
-        synElVal += 1 << k;
-        ++k;
-        RET(k >= 32 - uCoff);
-        RET(decodeBypass(binVal));
-      }
-
-      while (k--) {
-        RET(decodeBypass(binVal));
-        synElVal += binVal << k;
-      }
-    }
-
-    if (synElVal != 0) {
-      RET(decodeBypass(binVal));
-      if (binVal == 1) synElVal = -synElVal;
-    }
-  }
-
-  return 0;
-}
-
-// 9.3.3.1.1.7 Derivation process of ctxIdxInc for the syntax elements mvd_l0 and mvd_l1
 int Cabac::derivation_ctxIdxInc_for_mvd_lX(int32_t is_mvd_10, int32_t mbPartIdx,
                                            int32_t subMbPartIdx,
                                            int32_t isChroma,
@@ -2027,79 +1973,8 @@ int Cabac::decode_significant_coeff_flag(MB_RESIDUAL_LEVEL mb_block_level,
   return 0;
 }
 
-int Cabac::decode_coeff_abs_level_minus1(MB_RESIDUAL_LEVEL mb_block_level,
-                                         int32_t numDecodAbsLevelEq1,
-                                         int32_t numDecodAbsLevelGt1,
-                                         int32_t &synElVal) {
-  int32_t ctxIdxOffset = 0, ctxIdxInc = 0, ctxIdx = 0;
-  int32_t binVal = 0;
-  int32_t bypassFlag = 0;
-  int32_t ctxBlockCat = 0;
-
-  ctxBlockCat = mb_block_level;
-  if (ctxBlockCat < 5)
-    ctxIdxOffset = 227;
-  else if (ctxBlockCat == 5)
-    ctxIdxOffset = 426;
-  else if (ctxBlockCat > 5 && ctxBlockCat < 9)
-    ctxIdxOffset = 952;
-  else if (ctxBlockCat > 9 && ctxBlockCat < 13)
-    ctxIdxOffset = 982;
-  else if (ctxBlockCat == 9)
-    ctxIdxOffset = 708;
-  else
-    ctxIdxOffset = 766;
-
-  // Table 9-40 – Assignment of ctxIdxBlockCatOffset to ctxBlockCat for syntax elements coded_block_flag, significant_coeff_flag, last_significant_coeff_flag, and coeff_abs_level_minus1
-  const int32_t ctxIdxBlockCatOffset_arr[14] = {0,  10, 20, 30, 39, 0,  0,
-                                                10, 20, 0,  0,  10, 20, 0};
-  int32_t ctxIdxBlockCatOffset = ctxIdxBlockCatOffset_arr[ctxBlockCat];
-
-  ctxIdxInc =
-      ((numDecodAbsLevelGt1 != 0) ? 0 : MIN(4, 1 + numDecodAbsLevelEq1));
-  ctxIdx = ctxIdxOffset + ctxIdxBlockCatOffset + ctxIdxInc;
-
-  const int32_t uCoff = 14;
-  RET(decodeBin(bypassFlag, ctxIdx, binVal));
-
-  synElVal = 0;
-  ctxIdxInc = 5 + MIN(4 - ((ctxBlockCat == 3) ? 1 : 0), numDecodAbsLevelGt1);
-  ctxIdx = ctxIdxOffset + ctxIdxBlockCatOffset + ctxIdxInc;
-
-  while (binVal == 1) {
-    synElVal++;
-    if (synElVal >= uCoff) break;
-    RET(decodeBin(bypassFlag, ctxIdx, binVal));
-  }
-
-  if (synElVal != uCoff) {
-
-  } else {
-    int32_t k = 0;
-    if (synElVal >= uCoff) {
-      RET(decodeBypass(binVal));
-
-      while (binVal == 1) {
-        synElVal += 1 << k;
-        ++k;
-        RET(k >= 32 - uCoff);
-        RET(decodeBypass(binVal));
-      }
-
-      while (k--) {
-        RET(decodeBypass(binVal));
-        synElVal += binVal << k;
-      }
-    }
-  }
-
-  return 0;
-}
-
 int Cabac::decode_coeff_sign_flag(int32_t &synElVal) {
-  int32_t binVal = 0;
-  RET(decodeBypass(binVal));
-  synElVal = binVal;
+  synElVal = ff_decode_bypass();
   return 0;
 }
 
@@ -2269,13 +2144,12 @@ int Cabac::ff_decodeDecision(int32_t ctxIdx, int32_t &binVal) {
   int codIRangeLPS = ff_rangeTabLPS[2 * (ivlCurrRange & 0xC0) + pStateIdx];
   int bit, lps_mask;
 
-  static int yangjing = 0;
-  yangjing++;
-  printf("yangjing:%d\n", yangjing);
-
   ivlCurrRange -= codIRangeLPS;
   lps_mask = ((ivlCurrRange << (CABAC_BITS + 1)) - ivlOffset) >> 31;
 
+  if (-504934113 == ivlOffset) {
+    int a = 0;
+  }
   //printf("ivlOffset:%d\n", ivlOffset);
   ivlOffset -= (ivlCurrRange << (CABAC_BITS + 1)) & lps_mask;
   ivlCurrRange += (codIRangeLPS - ivlCurrRange) & lps_mask;
@@ -2318,11 +2192,11 @@ int Cabac::ff_initialization_decoding_engine() {
   ivlOffset = (*bytestream++) << 18;
   ivlOffset += (*bytestream++) << 10;
   // 将我们的 fetch 保持在 2 字节边界上，因为如果编译器（或 asm）将双字节加载优化为单个指令，这应该可以避免执行未对齐的加载
-  if (((uintptr_t)bytestream & 1) == 0) {
-    ivlOffset += (1 << 9);
-  } else {
-    ivlOffset += ((*bytestream++) << 2) + 2;
-  }
+  //if (((uintptr_t)bytestream & 1) == 0) {
+  ivlOffset += (1 << 9);
+  //} else {
+  //ivlOffset += ((*bytestream++) << 2) + 2;
+  //}
   ivlCurrRange = 0x1FE;
   if ((ivlCurrRange << (CABAC_BITS + 1)) < ivlOffset) return -1;
   return 0;
@@ -2341,10 +2215,10 @@ void Cabac::refill2() {
 
   x = -CABAC_MASK;
 
-  x += (bs.getP()[0] << 9) + (bs.getP()[1] << 1);
+  x += (bytestream[0] << 9) + (bytestream[1] << 1);
 
   ivlOffset += x << i;
-  if (bs.getP() < bs.getEndBuf()) bs.setP(bs.getP() + CABAC_BITS / 8);
+  if (bytestream < bytestream_end) bytestream += CABAC_BITS / 8;
 }
 
 // 9.3.2.2 Initialization process for context variables
@@ -2456,7 +2330,7 @@ int Cabac::decode_sao_offset_abs(int32_t &synElVal) {
              5)) -
       1;
 
-  while (i < length && decodeBypass())
+  while (i < length && ff_decode_bypass())
     i++;
 
   synElVal = i;
@@ -2466,16 +2340,15 @@ int Cabac::decode_sao_offset_abs(int32_t &synElVal) {
 
 int Cabac::decode_sao_offset_sign(int32_t &synElVal) {
   int32_t ctxIdxOffset = 0, binVal = 0, ctxIdx = 0, bypassFlag = 0;
-  decodeBypass(binVal);
-  synElVal = binVal;
+  synElVal = ff_decode_bypass();
 
   return 0;
 }
 
 int Cabac::decode_sao_band_position(int32_t &synElVal) {
-  int value = decodeBypass();
+  int value = ff_decode_bypass();
   for (int i = 0; i < 4; i++)
-    value = (value << 1) | decodeBypass();
+    value = (value << 1) | ff_decode_bypass();
   synElVal = value;
   return 0;
 }
@@ -2535,7 +2408,7 @@ int Cabac::decode_split_cu_flag(int32_t &synElVal, SPS &sps,
 #define SAMPLE_CTB(tab, x, y) ((tab)[x][y]])
 int Cabac::decode_cu_skip_flag(int x0, int y0, int x_cb, int y_cb,
                                int ctb_left_flag, int ctb_up_flag,
-                               uint8_t skip_flag[32][32]) {
+                               uint8_t skip_flag[64][64]) {
   SPS *m_sps = picture.m_slice->slice_header->m_sps;
   int min_cb_width = m_sps->min_cb_width;
   int inc = 0;
@@ -2563,6 +2436,7 @@ void Cabac::refill() {
 }
 
 int Cabac::ff_decode_bypass() {
+  //printf("ivlOffset:%d\n", ivlOffset);
   int range;
   ivlOffset += ivlOffset;
 
@@ -2623,7 +2497,7 @@ int Cabac::ff_hevc_merge_idx_decode(int MaxNumMergeCand) {
   int i = decode_bin(elem_offset[MERGE_IDX]);
 
   if (i != 0) {
-    while (i < MaxNumMergeCand - 1 && decodeBypass())
+    while (i < MaxNumMergeCand - 1 && ff_decode_bypass())
       i++;
   }
   return i;
@@ -2691,7 +2565,7 @@ int Cabac::mvd_decode() {
   int ret = 2;
   int k = 1;
 
-  while (k < CABAC_MAX_BIN && decodeBypass()) {
+  while (k < CABAC_MAX_BIN && ff_decode_bypass()) {
     ret += 1U << k;
     k++;
   }
@@ -2699,11 +2573,11 @@ int Cabac::mvd_decode() {
     return 0;
   }
   while (k--)
-    ret += decodeBypass() << k;
-  return decodeBypass();
+    ret += ff_decode_bypass() << k;
+  return ff_decode_bypass();
 }
 
-int Cabac::mvd_sign_flag_decode() { return decodeBypass(); }
+int Cabac::mvd_sign_flag_decode() { return ff_decode_bypass(); }
 
 int Cabac::ff_hevc_split_transform_flag_decode(int log2_trafo_size) {
   return decode_bin(elem_offset[SPLIT_TRANSFORM_FLAG] + 5 - log2_trafo_size);
@@ -2788,10 +2662,10 @@ int Cabac::last_significant_coeff_suffix_decode(
     int last_significant_coeff_prefix) {
   int i;
   int length = (last_significant_coeff_prefix >> 1) - 1;
-  int value = decodeBypass();
+  int value = ff_decode_bypass();
 
   for (i = 1; i < length; i++)
-    value = (value << 1) | decodeBypass();
+    value = (value << 1) | ff_decode_bypass();
   return value;
 }
 
@@ -2832,12 +2706,12 @@ int Cabac::coeff_abs_level_remaining_decode(int rc_rice_param) {
   int last_coeff_abs_level_remaining;
   int i;
 
-  while (prefix < CABAC_MAX_BIN && decodeBypass())
+  while (prefix < CABAC_MAX_BIN && ff_decode_bypass())
     prefix++;
 
   if (prefix < 3) {
     for (i = 0; i < rc_rice_param; i++)
-      suffix = (suffix << 1) | decodeBypass();
+      suffix = (suffix << 1) | ff_decode_bypass();
     last_coeff_abs_level_remaining = (prefix << rc_rice_param) + suffix;
   } else {
     int prefix_minus3 = prefix - 3;
@@ -2848,7 +2722,7 @@ int Cabac::coeff_abs_level_remaining_decode(int rc_rice_param) {
     }
 
     for (i = 0; i < prefix_minus3 + rc_rice_param; i++)
-      suffix = (suffix << 1) | decodeBypass();
+      suffix = (suffix << 1) | ff_decode_bypass();
     last_coeff_abs_level_remaining =
         (((1 << prefix_minus3) + 3 - 1) << rc_rice_param) + suffix;
   }
@@ -2860,591 +2734,8 @@ int Cabac::coeff_sign_flag_decode(uint8_t nb) {
   int ret = 0;
 
   for (i = 0; i < nb; i++)
-    ret = (ret << 1) | decodeBypass();
+    ret = (ret << 1) | ff_decode_bypass();
   return ret;
-}
-
-void Cabac::ff_hevc_hls_residual_coding(int x0, int y0, int log2_trafo_size,
-                                        enum ScanType scan_idx, int c_idx) {
-#define GET_COORD(offset, n)                                                   \
-  do {                                                                         \
-    x_c = (x_cg << 2) + scan_x_off[n];                                         \
-    y_c = (y_cg << 2) + scan_y_off[n];                                         \
-  } while (0)
-  //HEVCLocalContext *lc = s->HEVClc;
-  int transform_skip_flag = 0;
-
-  int last_significant_coeff_x, last_significant_coeff_y;
-  int last_scan_pos;
-  int n_end;
-  int num_coeff = 0;
-  int greater1_ctx = 1;
-
-  int num_last_subset;
-  int x_cg_last_sig, y_cg_last_sig;
-
-  const uint8_t *scan_x_cg, *scan_y_cg, *scan_x_off, *scan_y_off;
-
-  SPS *sps = picture.m_slice->slice_header->m_sps;
-
-  std::cout << "Into -> " << __FUNCTION__ << "():" << __LINE__ << std::endl;
-#if 0
-  //ptrdiff_t stride = s->frame->linesize[c_idx];
-  int hshift = sps->hshift[c_idx];
-  int vshift = sps->vshift[c_idx];
-  uint8_t *dst =
-      &s->frame->data[c_idx][(y0 >> vshift) * stride +
-                             ((x0 >> hshift) << s->ps.sps->pixel_shift)];
-  int16_t *coeffs =
-      (int16_t *)(c_idx ? lc->edge_emu_buffer2 : lc->edge_emu_buffer);
-  uint8_t significant_coeff_group_flag[8][8] = {{0}};
-  int explicit_rdpcm_flag = 0;
-  int explicit_rdpcm_dir_flag;
-
-  int trafo_size = 1 << log2_trafo_size;
-  int i;
-  int qp, shift, add, scale, scale_m;
-  static const uint8_t level_scale[] = {40, 45, 51, 57, 64, 72};
-  const uint8_t *scale_matrix = NULL;
-  uint8_t dc_scale;
-  int pred_mode_intra =
-      (c_idx == 0) ? lc->tu.intra_pred_mode : lc->tu.intra_pred_mode_c;
-
-  memset(coeffs, 0, trafo_size * trafo_size * sizeof(int16_t));
-
-  // Derive QP for dequant
-  if (!lc->cu.cu_transquant_bypass_flag) {
-    static const int qp_c[] = {29, 30, 31, 32, 33, 33, 34,
-                               34, 35, 35, 36, 36, 37, 37};
-    static const uint8_t rem6[51 + 4 * 6 + 1] = {
-        0, 1, 2, 3, 4, 5, 0, 1, 2, 3, 4, 5, 0, 1, 2, 3, 4, 5, 0,
-        1, 2, 3, 4, 5, 0, 1, 2, 3, 4, 5, 0, 1, 2, 3, 4, 5, 0, 1,
-        2, 3, 4, 5, 0, 1, 2, 3, 4, 5, 0, 1, 2, 3, 4, 5, 0, 1, 2,
-        3, 4, 5, 0, 1, 2, 3, 4, 5, 0, 1, 2, 3, 4, 5, 0, 1};
-
-    static const uint8_t div6[51 + 4 * 6 + 1] = {
-        0, 0, 0, 0,  0,  0,  1,  1,  1,  1,  1,  1,  2,  2,  2,  2,  2, 2, 3,
-        3, 3, 3, 3,  3,  4,  4,  4,  4,  4,  4,  5,  5,  5,  5,  5,  5, 6, 6,
-        6, 6, 6, 6,  7,  7,  7,  7,  7,  7,  8,  8,  8,  8,  8,  8,  9, 9, 9,
-        9, 9, 9, 10, 10, 10, 10, 10, 10, 11, 11, 11, 11, 11, 11, 12, 12};
-    int qp_y = lc->qp_y;
-
-    if (s->ps.pps->transform_skip_enabled_flag &&
-        log2_trafo_size <= s->ps.pps->log2_max_transform_skip_block_size) {
-      transform_skip_flag = hevc_transform_skip_flag_decode(s, c_idx);
-    }
-
-    if (c_idx == 0) {
-      qp = qp_y + s->ps.sps->qp_bd_offset;
-    } else {
-      int qp_i, offset;
-
-      if (c_idx == 1)
-        offset = s->ps.pps->cb_qp_offset + s->sh.slice_cb_qp_offset +
-                 lc->tu.cu_qp_offset_cb;
-      else
-        offset = s->ps.pps->cr_qp_offset + s->sh.slice_cr_qp_offset +
-                 lc->tu.cu_qp_offset_cr;
-
-      qp_i = av_clip(qp_y + offset, -s->ps.sps->qp_bd_offset, 57);
-      if (s->ps.sps->chroma_format_idc == 1) {
-        if (qp_i < 30)
-          qp = qp_i;
-        else if (qp_i > 43)
-          qp = qp_i - 6;
-        else
-          qp = qp_c[qp_i - 30];
-      } else {
-        if (qp_i > 51)
-          qp = 51;
-        else
-          qp = qp_i;
-      }
-
-      qp += s->ps.sps->qp_bd_offset;
-    }
-
-    shift = s->ps.sps->bit_depth_luma + log2_trafo_size - 5;
-    add = 1 << (shift - 1);
-    scale = level_scale[rem6[qp]] << (div6[qp]);
-    scale_m = 16; // default when no custom scaling lists.
-    dc_scale = 16;
-
-    if (s->ps.sps->scaling_list_enable_flag &&
-        !(transform_skip_flag && log2_trafo_size > 2)) {
-      const ScalingList *sl = s->ps.pps->scaling_list_data_present_flag
-                                  ? &s->ps.pps->scaling_list
-                                  : &s->ps.sps->scaling_list;
-      int matrix_id = lc->cu.CuPredMode != MODE_INTRA;
-
-      matrix_id = 3 * matrix_id + c_idx;
-
-      scale_matrix = sl->sl[log2_trafo_size - 2][matrix_id];
-      if (log2_trafo_size >= 4)
-        dc_scale = sl->sl_dc[log2_trafo_size - 4][matrix_id];
-    }
-  } else {
-    shift = 0;
-    add = 0;
-    scale = 0;
-    dc_scale = 0;
-  }
-
-  if (lc->cu.CuPredMode == MODE_INTER &&
-      s->ps.sps->explicit_rdpcm_enabled_flag &&
-      (transform_skip_flag || lc->cu.cu_transquant_bypass_flag)) {
-    explicit_rdpcm_flag = explicit_rdpcm_flag_decode(s, c_idx);
-    if (explicit_rdpcm_flag) {
-      explicit_rdpcm_dir_flag = explicit_rdpcm_dir_flag_decode(s, c_idx);
-    }
-  }
-
-  last_significant_coeff_xy_prefix_decode(s, c_idx, log2_trafo_size,
-                                          &last_significant_coeff_x,
-                                          &last_significant_coeff_y);
-
-  if (last_significant_coeff_x > 3) {
-    int suffix =
-        last_significant_coeff_suffix_decode(s, last_significant_coeff_x);
-    last_significant_coeff_x = (1 << ((last_significant_coeff_x >> 1) - 1)) *
-                                   (2 + (last_significant_coeff_x & 1)) +
-                               suffix;
-  }
-
-  if (last_significant_coeff_y > 3) {
-    int suffix =
-        last_significant_coeff_suffix_decode(s, last_significant_coeff_y);
-    last_significant_coeff_y = (1 << ((last_significant_coeff_y >> 1) - 1)) *
-                                   (2 + (last_significant_coeff_y & 1)) +
-                               suffix;
-  }
-
-  if (scan_idx == SCAN_VERT)
-    FFSWAP(int, last_significant_coeff_x, last_significant_coeff_y);
-
-  x_cg_last_sig = last_significant_coeff_x >> 2;
-  y_cg_last_sig = last_significant_coeff_y >> 2;
-
-  switch (scan_idx) {
-  case SCAN_DIAG: {
-    int last_x_c = last_significant_coeff_x & 3;
-    int last_y_c = last_significant_coeff_y & 3;
-
-    scan_x_off = ff_hevc_diag_scan4x4_x;
-    scan_y_off = ff_hevc_diag_scan4x4_y;
-    num_coeff = diag_scan4x4_inv[last_y_c][last_x_c];
-    if (trafo_size == 4) {
-      scan_x_cg = scan_1x1;
-      scan_y_cg = scan_1x1;
-    } else if (trafo_size == 8) {
-      num_coeff += diag_scan2x2_inv[y_cg_last_sig][x_cg_last_sig] << 4;
-      scan_x_cg = diag_scan2x2_x;
-      scan_y_cg = diag_scan2x2_y;
-    } else if (trafo_size == 16) {
-      num_coeff += diag_scan4x4_inv[y_cg_last_sig][x_cg_last_sig] << 4;
-      scan_x_cg = ff_hevc_diag_scan4x4_x;
-      scan_y_cg = ff_hevc_diag_scan4x4_y;
-    } else { // trafo_size == 32
-      num_coeff += diag_scan8x8_inv[y_cg_last_sig][x_cg_last_sig] << 4;
-      scan_x_cg = ff_hevc_diag_scan8x8_x;
-      scan_y_cg = ff_hevc_diag_scan8x8_y;
-    }
-    break;
-  }
-  case SCAN_HORIZ:
-    scan_x_cg = horiz_scan2x2_x;
-    scan_y_cg = horiz_scan2x2_y;
-    scan_x_off = horiz_scan4x4_x;
-    scan_y_off = horiz_scan4x4_y;
-    num_coeff =
-        horiz_scan8x8_inv[last_significant_coeff_y][last_significant_coeff_x];
-    break;
-  default: //SCAN_VERT
-    scan_x_cg = horiz_scan2x2_y;
-    scan_y_cg = horiz_scan2x2_x;
-    scan_x_off = horiz_scan4x4_y;
-    scan_y_off = horiz_scan4x4_x;
-    num_coeff =
-        horiz_scan8x8_inv[last_significant_coeff_x][last_significant_coeff_y];
-    break;
-  }
-  num_coeff++;
-  num_last_subset = (num_coeff - 1) >> 4;
-
-  for (i = num_last_subset; i >= 0; i--) {
-    int n, m;
-    int x_cg, y_cg, x_c, y_c, pos;
-    int implicit_non_zero_coeff = 0;
-    int64_t trans_coeff_level;
-    int prev_sig = 0;
-    int offset = i << 4;
-    int rice_init = 0;
-
-    uint8_t significant_coeff_flag_idx[16];
-    uint8_t nb_significant_coeff_flag = 0;
-
-    x_cg = scan_x_cg[i];
-    y_cg = scan_y_cg[i];
-
-    if ((i < num_last_subset) && (i > 0)) {
-      int ctx_cg = 0;
-      if (x_cg < (1 << (log2_trafo_size - 2)) - 1)
-        ctx_cg += significant_coeff_group_flag[x_cg + 1][y_cg];
-      if (y_cg < (1 << (log2_trafo_size - 2)) - 1)
-        ctx_cg += significant_coeff_group_flag[x_cg][y_cg + 1];
-
-      significant_coeff_group_flag[x_cg][y_cg] =
-          significant_coeff_group_flag_decode(s, c_idx, ctx_cg);
-      implicit_non_zero_coeff = 1;
-    } else {
-      significant_coeff_group_flag[x_cg][y_cg] =
-          ((x_cg == x_cg_last_sig && y_cg == y_cg_last_sig) ||
-           (x_cg == 0 && y_cg == 0));
-    }
-
-    last_scan_pos = num_coeff - offset - 1;
-
-    if (i == num_last_subset) {
-      n_end = last_scan_pos - 1;
-      significant_coeff_flag_idx[0] = last_scan_pos;
-      nb_significant_coeff_flag = 1;
-    } else {
-      n_end = 15;
-    }
-
-    if (x_cg < ((1 << log2_trafo_size) - 1) >> 2)
-      prev_sig = !!significant_coeff_group_flag[x_cg + 1][y_cg];
-    if (y_cg < ((1 << log2_trafo_size) - 1) >> 2)
-      prev_sig += (!!significant_coeff_group_flag[x_cg][y_cg + 1] << 1);
-
-    if (significant_coeff_group_flag[x_cg][y_cg] && n_end >= 0) {
-      static const uint8_t ctx_idx_map[] = {
-          0, 1, 4, 5, 2, 3, 4, 5,
-          6, 6, 8, 8, 7, 7, 8, 8, // log2_trafo_size == 2
-          1, 1, 1, 0, 1, 1, 0, 0,
-          1, 0, 0, 0, 0, 0, 0, 0, // prev_sig == 0
-          2, 2, 2, 2, 1, 1, 1, 1,
-          0, 0, 0, 0, 0, 0, 0, 0, // prev_sig == 1
-          2, 1, 0, 0, 2, 1, 0, 0,
-          2, 1, 0, 0, 2, 1, 0, 0, // prev_sig == 2
-          2, 2, 2, 2, 2, 2, 2, 2,
-          2, 2, 2, 2, 2, 2, 2, 2 // default
-      };
-      const uint8_t *ctx_idx_map_p;
-      int scf_offset = 0;
-      if (s->ps.sps->transform_skip_context_enabled_flag &&
-          (transform_skip_flag || lc->cu.cu_transquant_bypass_flag)) {
-        ctx_idx_map_p = (uint8_t *)&ctx_idx_map[4 * 16];
-        if (c_idx == 0) {
-          scf_offset = 40;
-        } else {
-          scf_offset = 14 + 27;
-        }
-      } else {
-        if (c_idx != 0) scf_offset = 27;
-        if (log2_trafo_size == 2) {
-          ctx_idx_map_p = (uint8_t *)&ctx_idx_map[0];
-        } else {
-          ctx_idx_map_p = (uint8_t *)&ctx_idx_map[(prev_sig + 1) << 4];
-          if (c_idx == 0) {
-            if ((x_cg > 0 || y_cg > 0)) scf_offset += 3;
-            if (log2_trafo_size == 3) {
-              scf_offset += (scan_idx == SCAN_DIAG) ? 9 : 15;
-            } else {
-              scf_offset += 21;
-            }
-          } else {
-            if (log2_trafo_size == 3)
-              scf_offset += 9;
-            else
-              scf_offset += 12;
-          }
-        }
-      }
-      for (n = n_end; n > 0; n--) {
-        x_c = scan_x_off[n];
-        y_c = scan_y_off[n];
-        if (significant_coeff_flag_decode(s, x_c, y_c, scf_offset,
-                                          ctx_idx_map_p)) {
-          significant_coeff_flag_idx[nb_significant_coeff_flag] = n;
-          nb_significant_coeff_flag++;
-          implicit_non_zero_coeff = 0;
-        }
-      }
-      if (implicit_non_zero_coeff == 0) {
-        if (s->ps.sps->transform_skip_context_enabled_flag &&
-            (transform_skip_flag || lc->cu.cu_transquant_bypass_flag)) {
-          if (c_idx == 0) {
-            scf_offset = 42;
-          } else {
-            scf_offset = 16 + 27;
-          }
-        } else {
-          if (i == 0) {
-            if (c_idx == 0)
-              scf_offset = 0;
-            else
-              scf_offset = 27;
-          } else {
-            scf_offset = 2 + scf_offset;
-          }
-        }
-        if (significant_coeff_flag_decode_0(s, c_idx, scf_offset) == 1) {
-          significant_coeff_flag_idx[nb_significant_coeff_flag] = 0;
-          nb_significant_coeff_flag++;
-        }
-      } else {
-        significant_coeff_flag_idx[nb_significant_coeff_flag] = 0;
-        nb_significant_coeff_flag++;
-      }
-    }
-
-    n_end = nb_significant_coeff_flag;
-
-    if (n_end) {
-      int first_nz_pos_in_cg;
-      int last_nz_pos_in_cg;
-      int c_rice_param = 0;
-      int first_greater1_coeff_idx = -1;
-      uint8_t coeff_abs_level_greater1_flag[8];
-      uint16_t coeff_sign_flag;
-      int sum_abs = 0;
-      int sign_hidden;
-      int sb_type;
-
-      // initialize first elem of coeff_bas_level_greater1_flag
-      int ctx_set = (i > 0 && c_idx == 0) ? 2 : 0;
-
-      if (s->ps.sps->persistent_rice_adaptation_enabled_flag) {
-        if (!transform_skip_flag && !lc->cu.cu_transquant_bypass_flag)
-          sb_type = 2 * (c_idx == 0 ? 1 : 0);
-        else
-          sb_type = 2 * (c_idx == 0 ? 1 : 0) + 1;
-        c_rice_param = lc->stat_coeff[sb_type] / 4;
-      }
-
-      if (!(i == num_last_subset) && greater1_ctx == 0) ctx_set++;
-      greater1_ctx = 1;
-      last_nz_pos_in_cg = significant_coeff_flag_idx[0];
-
-      for (m = 0; m < (n_end > 8 ? 8 : n_end); m++) {
-        int inc = (ctx_set << 2) + greater1_ctx;
-        coeff_abs_level_greater1_flag[m] =
-            coeff_abs_level_greater1_flag_decode(s, c_idx, inc);
-        if (coeff_abs_level_greater1_flag[m]) {
-          greater1_ctx = 0;
-          if (first_greater1_coeff_idx == -1) first_greater1_coeff_idx = m;
-        } else if (greater1_ctx > 0 && greater1_ctx < 3) {
-          greater1_ctx++;
-        }
-      }
-      first_nz_pos_in_cg = significant_coeff_flag_idx[n_end - 1];
-
-      if (lc->cu.cu_transquant_bypass_flag ||
-          (lc->cu.CuPredMode == MODE_INTRA &&
-           s->ps.sps->implicit_rdpcm_enabled_flag && transform_skip_flag &&
-           (pred_mode_intra == 10 || pred_mode_intra == 26)) ||
-          explicit_rdpcm_flag)
-        sign_hidden = 0;
-      else
-        sign_hidden = (last_nz_pos_in_cg - first_nz_pos_in_cg >= 4);
-
-      if (first_greater1_coeff_idx != -1) {
-        coeff_abs_level_greater1_flag[first_greater1_coeff_idx] +=
-            coeff_abs_level_greater2_flag_decode(s, c_idx, ctx_set);
-      }
-      if (!s->ps.pps->sign_data_hiding_flag || !sign_hidden) {
-        coeff_sign_flag = coeff_sign_flag_decode(s, nb_significant_coeff_flag)
-                          << (16 - nb_significant_coeff_flag);
-      } else {
-        coeff_sign_flag =
-            coeff_sign_flag_decode(s, nb_significant_coeff_flag - 1)
-            << (16 - (nb_significant_coeff_flag - 1));
-      }
-
-      for (m = 0; m < n_end; m++) {
-        n = significant_coeff_flag_idx[m];
-        GET_COORD(offset, n);
-        if (m < 8) {
-          trans_coeff_level = 1 + coeff_abs_level_greater1_flag[m];
-          if (trans_coeff_level == ((m == first_greater1_coeff_idx) ? 3 : 2)) {
-            int last_coeff_abs_level_remaining =
-                coeff_abs_level_remaining_decode(s, c_rice_param);
-
-            trans_coeff_level += last_coeff_abs_level_remaining;
-            if (trans_coeff_level > (3 << c_rice_param))
-              c_rice_param = s->ps.sps->persistent_rice_adaptation_enabled_flag
-                                 ? c_rice_param + 1
-                                 : FFMIN(c_rice_param + 1, 4);
-            if (s->ps.sps->persistent_rice_adaptation_enabled_flag &&
-                !rice_init) {
-              int c_rice_p_init = lc->stat_coeff[sb_type] / 4;
-              if (last_coeff_abs_level_remaining >= (3 << c_rice_p_init))
-                lc->stat_coeff[sb_type]++;
-              else if (2 * last_coeff_abs_level_remaining <
-                       (1 << c_rice_p_init))
-                if (lc->stat_coeff[sb_type] > 0) lc->stat_coeff[sb_type]--;
-              rice_init = 1;
-            }
-          }
-        } else {
-          int last_coeff_abs_level_remaining =
-              coeff_abs_level_remaining_decode(s, c_rice_param);
-
-          trans_coeff_level = 1 + last_coeff_abs_level_remaining;
-          if (trans_coeff_level > (3 << c_rice_param))
-            c_rice_param = s->ps.sps->persistent_rice_adaptation_enabled_flag
-                               ? c_rice_param + 1
-                               : FFMIN(c_rice_param + 1, 4);
-          if (s->ps.sps->persistent_rice_adaptation_enabled_flag &&
-              !rice_init) {
-            int c_rice_p_init = lc->stat_coeff[sb_type] / 4;
-            if (last_coeff_abs_level_remaining >= (3 << c_rice_p_init))
-              lc->stat_coeff[sb_type]++;
-            else if (2 * last_coeff_abs_level_remaining < (1 << c_rice_p_init))
-              if (lc->stat_coeff[sb_type] > 0) lc->stat_coeff[sb_type]--;
-            rice_init = 1;
-          }
-        }
-        if (s->ps.pps->sign_data_hiding_flag && sign_hidden) {
-          sum_abs += trans_coeff_level;
-          if (n == first_nz_pos_in_cg && (sum_abs & 1))
-            trans_coeff_level = -trans_coeff_level;
-        }
-        if (coeff_sign_flag >> 15) trans_coeff_level = -trans_coeff_level;
-        coeff_sign_flag <<= 1;
-        if (!lc->cu.cu_transquant_bypass_flag) {
-          if (s->ps.sps->scaling_list_enable_flag &&
-              !(transform_skip_flag && log2_trafo_size > 2)) {
-            if (y_c || x_c || log2_trafo_size < 4) {
-              switch (log2_trafo_size) {
-              case 3:
-                pos = (y_c << 3) + x_c;
-                break;
-              case 4:
-                pos = ((y_c >> 1) << 3) + (x_c >> 1);
-                break;
-              case 5:
-                pos = ((y_c >> 2) << 3) + (x_c >> 2);
-                break;
-              default:
-                pos = (y_c << 2) + x_c;
-                break;
-              }
-              scale_m = scale_matrix[pos];
-            } else {
-              scale_m = dc_scale;
-            }
-          }
-          trans_coeff_level =
-              (trans_coeff_level * (int64_t)scale * (int64_t)scale_m + add) >>
-              shift;
-          if (trans_coeff_level < 0) {
-            if ((~trans_coeff_level) & 0xFffffffffff8000)
-              trans_coeff_level = -32768;
-          } else {
-            if (trans_coeff_level & 0xffffffffffff8000)
-              trans_coeff_level = 32767;
-          }
-        }
-        coeffs[y_c * trafo_size + x_c] = trans_coeff_level;
-      }
-    }
-  }
-
-  if (lc->cu.cu_transquant_bypass_flag) {
-    if (explicit_rdpcm_flag ||
-        (s->ps.sps->implicit_rdpcm_enabled_flag &&
-         (pred_mode_intra == 10 || pred_mode_intra == 26))) {
-      int mode = s->ps.sps->implicit_rdpcm_enabled_flag
-                     ? (pred_mode_intra == 26)
-                     : explicit_rdpcm_dir_flag;
-
-      s->hevcdsp.transform_rdpcm(coeffs, log2_trafo_size, mode);
-    }
-  } else {
-    if (transform_skip_flag) {
-      int rot = s->ps.sps->transform_skip_rotation_enabled_flag &&
-                log2_trafo_size == 2 && lc->cu.CuPredMode == MODE_INTRA;
-      if (rot) {
-        for (i = 0; i < 8; i++)
-          FFSWAP(int16_t, coeffs[i], coeffs[16 - i - 1]);
-      }
-
-      s->hevcdsp.dequant(coeffs, log2_trafo_size);
-
-      if (explicit_rdpcm_flag ||
-          (s->ps.sps->implicit_rdpcm_enabled_flag &&
-           lc->cu.CuPredMode == MODE_INTRA &&
-           (pred_mode_intra == 10 || pred_mode_intra == 26))) {
-        int mode = explicit_rdpcm_flag ? explicit_rdpcm_dir_flag
-                                       : (pred_mode_intra == 26);
-
-        s->hevcdsp.transform_rdpcm(coeffs, log2_trafo_size, mode);
-      }
-    } else if (lc->cu.CuPredMode == MODE_INTRA && c_idx == 0 &&
-               log2_trafo_size == 2) {
-      s->hevcdsp.transform_4x4_luma(coeffs);
-    } else {
-      int max_xy = FFMAX(last_significant_coeff_x, last_significant_coeff_y);
-      if (max_xy == 0)
-        s->hevcdsp.idct_dc[log2_trafo_size - 2](coeffs);
-      else {
-        int col_limit = last_significant_coeff_x + last_significant_coeff_y + 4;
-        if (max_xy < 4)
-          col_limit = FFMIN(4, col_limit);
-        else if (max_xy < 8)
-          col_limit = FFMIN(8, col_limit);
-        else if (max_xy < 12)
-          col_limit = FFMIN(24, col_limit);
-        s->hevcdsp.idct[log2_trafo_size - 2](coeffs, col_limit);
-      }
-    }
-  }
-  if (lc->tu.cross_pf) {
-    int16_t *coeffs_y = (int16_t *)lc->edge_emu_buffer;
-
-    for (i = 0; i < (trafo_size * trafo_size); i++) {
-      coeffs[i] = coeffs[i] + ((lc->tu.res_scale_val * coeffs_y[i]) >> 3);
-    }
-  }
-  s->hevcdsp.add_residual[log2_trafo_size - 2](dst, coeffs, stride);
-#endif
-}
-
-void ff_hevc_hls_mvd_coding(int x0, int y0, int log2_cb_size) {
-#if 0
-  HEVCLocalContext *lc = s->HEVClc;
-  int x = abs_mvd_greater0_flag_decode(s);
-  int y = abs_mvd_greater0_flag_decode(s);
-
-  if (x) x += abs_mvd_greater1_flag_decode(s);
-  if (y) y += abs_mvd_greater1_flag_decode(s);
-
-  switch (x) {
-  case 2:
-    lc->pu.mvd.x = mvd_decode(s);
-    break;
-  case 1:
-    lc->pu.mvd.x = mvd_sign_flag_decode(s);
-    break;
-  case 0:
-    lc->pu.mvd.x = 0;
-    break;
-  }
-
-  switch (y) {
-  case 2:
-    lc->pu.mvd.y = mvd_decode(s);
-    break;
-  case 1:
-    lc->pu.mvd.y = mvd_sign_flag_decode(s);
-    break;
-  case 0:
-    lc->pu.mvd.y = 0;
-    break;
-  }
-#endif
 }
 
 int Cabac::ff_hevc_part_mode_decode(int log2_cb_size, int CuPredMode) {
@@ -3473,14 +2764,14 @@ int Cabac::ff_hevc_part_mode_decode(int log2_cb_size, int CuPredMode) {
   if (decode_bin(elem_offset[PART_MODE] + 1)) { // 01X, 01XX
     if (decode_bin(elem_offset[PART_MODE] + 3)) // 011
       return PART_2NxN;
-    if (decodeBypass()) // 0101
+    if (ff_decode_bypass()) // 0101
       return PART_2NxnD;
     return PART_2NxnU; // 0100
   }
 
   if (decode_bin(elem_offset[PART_MODE] + 3)) // 001
     return PART_Nx2N;
-  if (decodeBypass()) // 0001
+  if (ff_decode_bypass()) // 0001
     return PART_nRx2N;
   return PART_nLx2N; // 0000
 }

@@ -492,7 +492,7 @@ int SPS::sps_range_extension() {
     int WpOffsetHalfRangeC =
         1 << (high_precision_offsets_enabled_flag ? (BitDepthC - 1) : 7);
   }
-  int persistent_rice_adaptation_enabled_flag = bs->readUn(1);
+  persistent_rice_adaptation_enabled_flag = bs->readUn(1);
   int cabac_bypass_alignment_enabled_flag = bs->readUn(1);
   return 0;
 }

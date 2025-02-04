@@ -445,6 +445,7 @@ class SPS {
   int implicit_rdpcm_enabled_flag = 0;
   int explicit_rdpcm_enabled_flag = 0;
   int extended_precision_processing_flag = 0;
+  int persistent_rice_adaptation_enabled_flag = 0;
 
  private:
   void vui_parameters();

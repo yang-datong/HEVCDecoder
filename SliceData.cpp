@@ -360,68 +360,95 @@ void SliceData::set_ct_depth(SPS *sps, int x0, int y0, int log2_cb_size,
 }
 
 int SliceData::coding_quadtree(int x0, int y0, int log2CbSize, int cqtDepth) {
+  /* 图像宽高参数 */
   int32_t pic_width_in_luma_samples = m_sps->pic_width_in_luma_samples;
   int32_t pic_height_in_luma_samples = m_sps->pic_height_in_luma_samples;
+  /* 最小编码块尺寸 */
   int32_t MinCbLog2SizeY = m_sps->MinCbLog2SizeY;
 
+  /* 当前四叉树深度 */
   this->ct_depth = cqtDepth;
+  /* 分割标志二维数组 */
   int split_cu_flag[32][32] = {{0}};
   IsCuQpDeltaCoded = 0, CuQpDeltaVal = 0, IsCuChromaQpOffsetCoded = 0;
 
   int Log2MinCuChromaQpOffsetSize =
       m_sps->CtbLog2SizeY - m_pps->diff_cu_chroma_qp_offset_depth;
 
+  /* 当前块完全位于图像边界内,当前块尺寸大于最小编码块尺寸 */
   if (x0 + (1 << log2CbSize) <= pic_width_in_luma_samples &&
       y0 + (1 << log2CbSize) <= pic_height_in_luma_samples &&
       log2CbSize > MinCbLog2SizeY) {
+    /* 解码split_cu_flag */
     cabac->decode_split_cu_flag(split_cu_flag[x0][y0], *m_sps, tab_ct_depth,
                                 ctb_left_flag, ctb_up_flag, ct_depth, x0, y0);
     std::cout << "[if]split_cu_flag:" << split_cu_flag[x0][y0]
               << ",cqtDepth:" << cqtDepth << std::endl;
   } else {
+    /* 当块尺寸大于最小允许尺寸时强制分割 */
     split_cu_flag[x0][y0] =
         (log2CbSize > m_sps->log2_min_luma_coding_block_size);
     std::cout << "[else]split_cu_flag:" << split_cu_flag[x0][y0]
               << ",cqtDepth:" << cqtDepth << std::endl;
   }
 
+  /* 当CU尺寸≥最小QP偏移尺寸时重置QP偏移状态 */
   if (m_pps->cu_qp_delta_enabled_flag &&
       log2CbSize >= m_pps->Log2MinCuQpDeltaSize)
     IsCuQpDeltaCoded = 0, CuQpDeltaVal = 0;
 
+  /* 当CU尺寸≥色度QP偏移最小尺寸时重置色度QP偏移状态 */
   if (header->cu_chroma_qp_offset_enabled_flag &&
       log2CbSize >= Log2MinCuChromaQpOffsetSize)
     IsCuChromaQpOffsetCoded = 0;
 
+  /* 四叉树递归处理:需要分割 */
   if (split_cu_flag[x0][y0]) {
+    /* 计算子块坐标（x1 = x0 + 半宽，y1 = y0 + 半高） */
     int x1 = x0 + (1 << (log2CbSize - 1));
     int y1 = y0 + (1 << (log2CbSize - 1));
+
+    /* 递归处理四个子块：每次递归将块尺寸减半，深度+1 */
+    /* 左上子块（x0, y0）*/
     coding_quadtree(x0, y0, log2CbSize - 1, cqtDepth + 1);
+    /* 右上子块（x1, y0）（仅当x1不越界）*/
     if (x1 < pic_width_in_luma_samples)
       coding_quadtree(x1, y0, log2CbSize - 1, cqtDepth + 1);
+    /* 左下子块（x0, y1）（仅当y1不越界）*/
     if (y1 < pic_height_in_luma_samples)
       coding_quadtree(x0, y1, log2CbSize - 1, cqtDepth + 1);
+    /* 右下子块（x1, y1）（仅当x1和y1都不越界）*/
     if (x1 < pic_width_in_luma_samples && y1 < pic_height_in_luma_samples)
       coding_quadtree(x1, y1, log2CbSize - 1, cqtDepth + 1);
-  } else
+  }
+  /* 叶子节点处理: 当不需要分割时，执行预测/变换/量化等核心编码操作 */
+  else
     coding_unit(x0, y0, log2CbSize);
   return 0;
 }
 
 int SliceData::coding_unit(int x0, int y0, int log2CbSize) {
+  /* 是否跳过变换和量化过程 */
   cu_transquant_bypass_flag = false;
   //CuPredMode[32][32] = {{0}};
+  /* 存储每个 CU 是否使用调色板模式 */
   int palette_mode_flag[32][32] = {{0}};
+  /* 最大亮度变换块大小的对数 */
   MaxTbLog2SizeY = m_sps->log2_min_luma_transform_block_size +
                    m_sps->log2_diff_max_min_luma_transform_block_size;
+  /* 初始化划分模式 (part_mode) 为 PART_2Nx2N，表示不划分。HEVC 中，一个 CU 可以被划分为 1 个、2 个或 4 个预测单元（Prediction Unit, PU）*/
   int part_mode = PART_2Nx2N;
   int &PartMode = part_mode;
+  /*  初始化帧内分割标志 (IntraSplitFlag) 为 0，表示不进行帧内分割 */
   IntraSplitFlag = 0;
 
+  /* 当前 CU 在 CTB（Coding Tree Block）网格中的水平，垂直坐标 x_cb,y_cb */
   int x_cb = x0 >> m_sps->log2_min_luma_coding_block_size;
   int y_cb = y0 >> m_sps->log2_min_luma_coding_block_size;
 
+  /* 将当前 CU 的预测模式设置为帧内预测 */
   CuPredMode[x0][y0] = MODE_INTRA;
+  /* 是否跳过当前 CU 的编码 */
   cu_skip_flag[x0][y0] = 0;
 
   static int yangjing = 0;
@@ -435,54 +462,76 @@ int SliceData::coding_unit(int x0, int y0, int log2CbSize) {
     std::cout << "cu_transquant_bypass_flag:" << cu_transquant_bypass_flag
               << std::endl;
   }
+
+  /*  如果当前 slice 不是 I slice */
   if (header->slice_type != HEVC_SLICE_I) {
     cu_skip_flag[x0][y0] =
         cabac->decode_cu_skip_flag(x0, y0, x_cb, y_cb, ctb_left_flag,
                                    ctb_up_left_flag, cu_skip_flag); //ae(v);
     std::cout << "cu_skip_flag:" << cu_skip_flag[x0][y0] << std::endl;
     CuPredMode[x0][y0] = cu_skip_flag[x0][y0] ? MODE_SKIP : MODE_INTER;
-  } else {
-    /* TODO YangJing ??? <25-01-26 15:24:15> */
   }
 
+  /* 计算当前 CU 的大小 nCbS */
   int nCbS = (1 << log2CbSize);
+  /* 如果当前 CU 是跳过模式 */
   if (cu_skip_flag[x0][y0])
+    /* 调用 prediction_unit 函数处理预测单元。对于跳过模式，CU 直接作为 PU 处理，不进行进一步划分。 */
     prediction_unit(x0, y0, nCbS, nCbS);
   else {
     if (header->slice_type != HEVC_SLICE_I) {
       int pred_mode_flag = 0; //ae(v);
       std::cout << "pred_mode_flag:" << pred_mode_flag << std::endl;
+      std::cout << "Into -> " << __FUNCTION__ << "():" << __LINE__ << std::endl;
+      exit(0);
       CuPredMode[x0][y0] = pred_mode_flag;
     }
+    /* 如果启用了调色板模式，当前 CU 使用帧内预测，并且 CU 大小小于等于最大变换块大小。 */
     if (m_sps->palette_mode_enabled_flag && CuPredMode[x0][y0] == MODE_INTRA &&
         log2CbSize <= MaxTbLog2SizeY) {
       palette_mode_flag[x0][y0] = 0; //ae(v);
       std::cout << "palette_mode_flag:" << palette_mode_flag[x0][y0]
                 << std::endl;
+      std::cout << "Into -> " << __FUNCTION__ << "():" << __LINE__ << std::endl;
+      exit(0);
     }
+    /* 当前 CU 使用调色板模式 */
     if (palette_mode_flag[x0][y0])
       palette_coding(x0, y0, nCbS);
     else {
+      /* 当前 CU 不使用调色板模式 */
+
+      //用于存储每个 CU 是否使用 PCM 模式
       int pcm_flag[32][32] = {0};
+      /* 如果当前 CU 不是帧内预测，或者 CU 大小等于最小 CU 大小 */
       if (CuPredMode[x0][y0] != MODE_INTRA ||
           log2CbSize == m_sps->MinCbLog2SizeY) {
+        if (yangjing == 2) {
+          int a = 0;
+        }
+        /* 解码划分模式 part_mode */
         part_mode = cabac->ff_hevc_part_mode_decode(
             log2CbSize, CuPredMode[x0][y0]); //ae(v);
         std::cout << "part_mode:" << part_mode << std::endl;
+        /* 如果划分模式为 PART_NxN 并且当前 CU 使用帧内预测，则设置 IntraSplitFlag 为 1 */
         IntraSplitFlag =
             part_mode == PART_NxN && CuPredMode[x0][y0] == MODE_INTRA;
-
-        if (yangjing == 2) {
-          exit(0);
-        }
+        //if (yangjing == 2) {
+        //exit(0);
+        //}
       }
+
+      /* 处理帧内预测 */
       if (CuPredMode[x0][y0] == MODE_INTRA) {
+        /* 如果不划分 CU，启用了 PCM 模式，并且 CU 大小在 PCM 模式允许的范围内 */
         if (PartMode == PART_2Nx2N && m_sps->pcm_enabled_flag &&
             log2CbSize >= m_sps->log2_min_pcm_luma_coding_block_size &&
             log2CbSize <= m_sps->log2_max_pcm_luma_coding_block_size) {
           pcm_flag[x0][y0] = 0; //ae(v);
           std::cout << "pcm_flag:" << pcm_flag[x0][y0] << std::endl;
         }
+
+        /* 如果当前 CU 使用 PCM 模式 */
         if (pcm_flag[x0][y0]) {
           while (!bs->byte_aligned()) {
             int pcm_alignment_zero_bit = 0; //f(1);
@@ -490,7 +539,9 @@ int SliceData::coding_unit(int x0, int y0, int log2CbSize) {
                       << std::endl;
           }
           pcm_sample(x0, y0, log2CbSize);
-        } else {
+        }
+        /* 如果当前 CU 不使用 PCM 模式 */
+        else {
           // NOTE: 帧内预测 ffmepg -> intra_prediction_unit(s, x0, y0, log2CbSize);
           int i, j;
           int prev_intra_luma_pred_flag[32][32] = {0};
@@ -498,8 +549,10 @@ int SliceData::coding_unit(int x0, int y0, int log2CbSize) {
           rem_intra_luma_pred_mode[32][32] = {0};
           intra_chroma_pred_mode[32][32] = {0};
           int pbOffset = (PartMode == PART_NxN) ? (nCbS / 2) : nCbS;
+          /* 循环遍历每个 PU（根据 PartMode 确定 PU 的大小和位置） */
           for (j = 0; j < nCbS; j = j + pbOffset)
             for (i = 0; i < nCbS; i = i + pbOffset) {
+              /* prev_intra_luma_pred_flag指示是否使用最可能模式（Most Probable Mode, MPM）列表中的模式 */
               prev_intra_luma_pred_flag[x0 + i][y0 + j] = cabac->decode_bin(
                   elem_offset[PREV_INTRA_LUMA_PRED_FLAG]); // ae(v);
               std::cout << "prev_intra_luma_pred_flag:"
@@ -509,19 +562,21 @@ int SliceData::coding_unit(int x0, int y0, int log2CbSize) {
           for (j = 0; j < nCbS; j = j + pbOffset)
             for (i = 0; i < nCbS; i = i + pbOffset)
               if (prev_intra_luma_pred_flag[x0 + i][y0 + j]) {
+                /* mpm_idx 指示使用 MPM 列表中的哪个模式 */
                 mpm_idx[x0 + i][y0 + j] =
                     cabac->ff_hevc_mpm_idx_decode(); // ae(v);
                 std::cout << "mpm_idx:" << mpm_idx[x0 + i][y0 + j] << std::endl;
               } else {
+                /* em_intra_luma_pred_mode 指示在不使用 MPM 列表时的模式 */
                 rem_intra_luma_pred_mode[x0 + i][y0 + j] =
                     cabac->ff_hevc_rem_intra_luma_pred_mode_decode(); // ae(v);
-                std::cout << "rem_intra_luma_pred_mode:"
-                          << rem_intra_luma_pred_mode[x0 + i][y0 + j]
-                          << std::endl;
+                printf("rem_intra_luma_pred_mode:%d\n",
+                       rem_intra_luma_pred_mode[x0 + i][y0 + i]);
               }
           if (m_sps->ChromaArrayType == 3) {
             for (j = 0; j < nCbS; j = j + pbOffset)
               for (i = 0; i < nCbS; i = i + pbOffset) {
+                /* 解码色度帧内预测模式 */
                 intra_chroma_pred_mode[x0 + 1][y0 + j] =
                     cabac->ff_hevc_intra_chroma_pred_mode_decode(); //ae(v);
                 std::cout << "intra_chroma_pred_mode:"
@@ -529,6 +584,7 @@ int SliceData::coding_unit(int x0, int y0, int log2CbSize) {
                           << std::endl;
               }
           } else if (m_sps->ChromaArrayType != 0) {
+            /* 解码色度帧内预测模式 */
             intra_chroma_pred_mode[x0][y0] =
                 cabac->ff_hevc_intra_chroma_pred_mode_decode(); //ae(v);
             if (m_sps->ChromaArrayType == 2) {
@@ -537,7 +593,10 @@ int SliceData::coding_unit(int x0, int y0, int log2CbSize) {
             }
           }
         }
-      } else {
+      }
+      /* 处理帧间预测 (CuPredMode[x0][y0] != MODE_INTRA) */
+      else {
+        /* 根据 PartMode 的值，将 CU 划分为一个或多个 PU，并对每个 PU 调用 prediction_unit 函数 */
         if (PartMode == PART_2Nx2N)
           prediction_unit(x0, y0, nCbS, nCbS);
         else if (PartMode == PART_2NxN) {
@@ -565,8 +624,11 @@ int SliceData::coding_unit(int x0, int y0, int log2CbSize) {
           prediction_unit(x0 + (nCbS / 2), y0 + (nCbS / 2), nCbS / 2, nCbS / 2);
         }
       }
+      /* 如果当前 CU 不使用 PCM 模式 */
       if (!pcm_flag[x0][y0]) {
+        /* 表示残差四叉树（Residual Quadtree, RQT）的根节点是否存在编码块标志（Coded Block Flag, CBF） */
         int rqt_root_cbf = 1;
+        /* 如果当前 CU 不是帧内预测，并且不是不划分的merge模式 */
         if (CuPredMode[x0][y0] != MODE_INTRA &&
             !(PartMode == PART_2Nx2N && merge_flag[x0][y0])) {
           rqt_root_cbf =
@@ -574,16 +636,19 @@ int SliceData::coding_unit(int x0, int y0, int log2CbSize) {
           std::cout << "rqt_root_cbf:" << rqt_root_cbf << std::endl;
         }
         if (rqt_root_cbf) {
+          /* 计算最大变换深度 */
           MaxTrafoDepth = (CuPredMode[x0][y0] == MODE_INTRA
                                ? (m_sps->max_transform_hierarchy_depth_intra +
                                   IntraSplitFlag)
                                : m_sps->max_transform_hierarchy_depth_inter);
+          /*  调用 transform_tree 函数处理变换树 */
           transform_tree(x0, y0, x0, y0, log2CbSize, 0, 0);
         }
       }
     }
   }
 
+  /* 设置编码树（Coding Tree, CT）的深度 */
   set_ct_depth(m_sps, x0, y0, log2CbSize, ct_depth);
   return 0;
 }
@@ -884,10 +949,12 @@ int SliceData::transform_unit(int x0, int y0, int xBase, int yBase,
 
 int SliceData::residual_coding(int x0, int y0, int log2TrafoSize,
                                Cabac::ScanType scanIdx, int cIdx) {
+  int scale_m;
   uint8_t transform_skip_flag[32][32][32] = {0};
   uint8_t explicit_rdpcm_flag[32][32][32] = {0};
   uint8_t explicit_rdpcm_dir_flag[32][32][32] = {0};
   int xS, yS, xC, yC;
+  int greater1_ctx = 1;
 
   if (m_pps->transform_skip_enabled_flag && !cu_transquant_bypass_flag &&
       (log2TrafoSize <= m_pps->Log2MaxTransformSkipSize))
@@ -935,6 +1002,7 @@ int SliceData::residual_coding(int x0, int y0, int log2TrafoSize,
   } else {
     LastSignificantCoeffY = last_sig_coeff_y_prefix;
   }
+  /* TODO YangJing 做到这里来了，LastSignificantCoeffX应该是5,而不是1 <25-02-05 00:11:18> */
   std::cout << "LastSignificantCoeffX:" << LastSignificantCoeffX << std::endl;
   std::cout << "LastSignificantCoeffY:" << LastSignificantCoeffY << std::endl;
 
@@ -945,9 +1013,8 @@ int SliceData::residual_coding(int x0, int y0, int log2TrafoSize,
     a = SWAP_tmp;                                                              \
   } while (0)
   //When scanIdx is equal to 2, the coordinates are swapped as follows:
-  if (scanIdx == Cabac::SCAN_VERT) {
+  if (scanIdx == Cabac::SCAN_VERT)
     FFSWAP(int, LastSignificantCoeffX, LastSignificantCoeffY);
-  }
 
   /* TODO YangJing  <25-01-26 10:03:32> */
   //ScanOrder[ log2BlockSize ][ scanIdx ][ sPos ][ sComp ]
@@ -970,6 +1037,18 @@ int SliceData::residual_coding(int x0, int y0, int log2TrafoSize,
           1 << log2BlockSize, ScanOrder[log2BlockSize][3]);
     }
   }
+
+  //std::cout << std::endl;
+  //for (int i = 0; i < 16; ++i) {
+  //cout << (int)ScanOrder[2][scanIdx][i][0] << ",";
+  //}
+  //std::cout << std::endl;
+
+  //std::cout << std::endl;
+  //for (int i = 0; i < 16; ++i) {
+  //cout << (int)ScanOrder[2][scanIdx][i][1] << ",";
+  //}
+  //std::cout << std::endl;
   //=============================================
 
   // scanIdx等于0指定右上对角扫描顺序，scanIdx等于1指定水平扫描顺序，scanIdx等于2指定垂直扫描顺序，scanIdx等于3指定横向扫描顺序
@@ -992,14 +1071,17 @@ int SliceData::residual_coding(int x0, int y0, int log2TrafoSize,
   int i, n;
   uint8_t coded_sub_block_flag[32][32] = {0};
   uint8_t sig_coeff_flag[32][32] = {0};
-  uint8_t coeff_abs_level_greater1_flag[15] = {0};
+  uint8_t coeff_abs_level_greater1_flag[32] = {0};
 
   int x_cg_last_sig = LastSignificantCoeffX >> 2;
   int y_cg_last_sig = LastSignificantCoeffY >> 2;
 
   for (i = lastSubBlock; i >= 0; i--) {
+    uint8_t significant_coeff_flag_idx[16];
     uint8_t nb_significant_coeff_flag = 0;
 
+    int rice_init = 0;
+    int pos;
     xS = ScanOrder[log2TrafoSize - 2][scanIdx][i][0];
     yS = ScanOrder[log2TrafoSize - 2][scanIdx][i][1];
     int escapeDataPresent = 0;
@@ -1019,6 +1101,7 @@ int SliceData::residual_coding(int x0, int y0, int log2TrafoSize,
 
     if (i == lastSubBlock) {
       nb_significant_coeff_flag = 1;
+      significant_coeff_flag_idx[0] = lastScanPos;
     }
 
     int prev_sig = 0;
@@ -1027,25 +1110,43 @@ int SliceData::residual_coding(int x0, int y0, int log2TrafoSize,
     if (yS < ((1 << log2TrafoSize) - 1) >> 2)
       prev_sig += (!!coded_sub_block_flag[xS][yS + 1] << 1);
 
-    const uint8_t *ctx_idx_map_p;
+    uint8_t *ctx_idx_map_p;
     int scf_offset = 0;
     get_scf_offse(scf_offset, ctx_idx_map_p, transform_skip_flag[x0][y0][cIdx],
                   cIdx, log2TrafoSize, xS, yS, scanIdx, prev_sig);
 
-    /* TODO YangJing  <25-01-26 16:59:17> */
+    static int yangjing = 0;
     for (n = (i == lastSubBlock) ? lastScanPos - 1 : 15; n >= 0; n--) {
       xC = (xS << 2) + ScanOrder[2][scanIdx][n][0];
       yC = (yS << 2) + ScanOrder[2][scanIdx][n][1];
+      printf("Call significant_coeff_flag_decode(%d,%d,%d,%u)\n", xC, yC,
+             scf_offset, ctx_idx_map_p);
       if (coded_sub_block_flag[xS][yS] && (n > 0 || !inferSbDcSigCoeffFlag)) {
-        sig_coeff_flag[xC][yC] =
-            cabac->significant_coeff_flag_decode(xC, yC, scf_offset,
-                                                 ctx_idx_map_p); //ae(v);
-        printf("sig_coeff_flag:%d\n", sig_coeff_flag[xC][yC]);
-        if (sig_coeff_flag[xC][yC]) {
-          nb_significant_coeff_flag++;
-          inferSbDcSigCoeffFlag = 0;
+        if (n == 0) {
+          get_scf_offse0(scf_offset, ctx_idx_map_p,
+                         transform_skip_flag[x0][y0][cIdx], cIdx, log2TrafoSize,
+                         xS, yS, scanIdx, prev_sig, i);
+          sig_coeff_flag[xC][yC] = cabac->decode_bin(
+              elem_offset[SIGNIFICANT_COEFF_FLAG] + scf_offset); //ae(v);
+          if (sig_coeff_flag[xC][yC]) {
+            significant_coeff_flag_idx[nb_significant_coeff_flag] = 0;
+            nb_significant_coeff_flag++;
+            inferSbDcSigCoeffFlag = 0;
+          }
+
+        } else {
+          sig_coeff_flag[xC][yC] =
+              cabac->significant_coeff_flag_decode(xC, yC, scf_offset,
+                                                   ctx_idx_map_p); //ae(v);
+          if (sig_coeff_flag[xC][yC]) {
+            significant_coeff_flag_idx[nb_significant_coeff_flag] = n;
+            nb_significant_coeff_flag++;
+            inferSbDcSigCoeffFlag = 0;
+          }
         }
       }
+      printf("sig_coeff_flag:%d,xC:%d,yC:%d\n", sig_coeff_flag[xC][yC], xC, yC);
+      printf("yangjing:%d\n", ++yangjing);
     }
 
     int ctx_set = (i > 0 && cIdx == 0) ? 2 : 0;
@@ -1054,8 +1155,24 @@ int SliceData::residual_coding(int x0, int y0, int log2TrafoSize,
     int c_rice_param = 0;
     int numGreater1Flag = 0;
     int lastGreater1ScanPos = -1;
-    int greater1_ctx = 1;
+    int sbType;
     if (!(i == lastSubBlock) && greater1_ctx == 0) ctx_set++;
+    greater1_ctx = 1;
+
+    if (m_sps->persistent_rice_adaptation_enabled_flag) {
+      if (!transform_skip_flag && !cu_transquant_bypass_flag)
+        sbType = 2 * (cIdx == 0 ? 1 : 0);
+      else
+        sbType = 2 * (cIdx == 0 ? 1 : 0) + 1;
+      c_rice_param = StatCoeff[sbType] / 4;
+    }
+
+    if (m_sps->persistent_rice_adaptation_enabled_flag) {
+      std::cout << "Into -> " << __FUNCTION__ << "():" << __LINE__ << std::endl;
+      exit(0);
+      //c_rice_param = stat_coeff[sb_type] / 4;
+    }
+
     for (n = 15; n >= 0; n--) {
       xC = (xS << 2) + ScanOrder[2][scanIdx][n][0];
       yC = (yS << 2) + ScanOrder[2][scanIdx][n][1];
@@ -1064,11 +1181,22 @@ int SliceData::residual_coding(int x0, int y0, int log2TrafoSize,
           int inc = (ctx_set << 2) + greater1_ctx;
           coeff_abs_level_greater1_flag[n] =
               cabac->coeff_abs_level_greater1_flag_decode(cIdx, inc); //ae(v);
+          printf("coeff_abs_level_greater1_flag:%d,cIdx:%d,inc:%d\n",
+                 coeff_abs_level_greater1_flag[n], cIdx, inc);
           numGreater1Flag++;
           if (coeff_abs_level_greater1_flag[n] && lastGreater1ScanPos == -1)
             lastGreater1ScanPos = n;
           else if (coeff_abs_level_greater1_flag[n])
             escapeDataPresent = 1;
+
+          //from ffmpeg {
+          if (coeff_abs_level_greater1_flag[n]) {
+            greater1_ctx = 0;
+          } else if (greater1_ctx > 0 && greater1_ctx < 3) {
+            greater1_ctx++;
+          }
+          // }
+
         } else
           escapeDataPresent = 1;
         if (lastSigScanPos == -1) lastSigScanPos = n;
@@ -1081,7 +1209,9 @@ int SliceData::residual_coding(int x0, int y0, int log2TrafoSize,
 
     uint8_t coeff_abs_level_greater2_flag[32] = {0};
     uint8_t coeff_abs_level_remaining[32] = {0};
-    uint8_t TransCoeffLevel[8][8][8][8][8] = {0};
+    //uint8_t TransCoeffLevel[8][8][8][8][8] = {0};
+    uint8_t TransCoeffLevel = 0;
+
     int signHidden;
     if (cu_transquant_bypass_flag ||
         (CuPredMode[x0][y0] == MODE_INTRA &&
@@ -1095,31 +1225,51 @@ int SliceData::residual_coding(int x0, int y0, int log2TrafoSize,
     if (lastGreater1ScanPos != -1) {
       coeff_abs_level_greater2_flag[lastGreater1ScanPos] =
           cabac->coeff_abs_level_greater2_flag_decode(cIdx, ctx_set); // ae(v);
+      printf("coeff_abs_level_greater2_flag:%d\n",
+             coeff_abs_level_greater2_flag[lastGreater1ScanPos]);
       if (coeff_abs_level_greater2_flag[lastGreater1ScanPos])
         escapeDataPresent = 1;
     }
-    uint8_t coeff_sign_flag[16] = {0};
+
+#if 0
+    uint16_t coeff_sign_flag[16] = {0};
     for (n = 15; n >= 0; n--) {
       xC = (xS << 2) + ScanOrder[2][scanIdx][n][0];
       yC = (yS << 2) + ScanOrder[2][scanIdx][n][1];
       if (sig_coeff_flag[xC][yC] && (!m_pps->sign_data_hiding_enabled_flag ||
                                      !signHidden || (n != firstSigScanPos))) {
-        if (!m_pps->sign_data_hiding_enabled_flag || !signHidden) {
-          coeff_sign_flag[n] =
-              cabac->coeff_sign_flag_decode(nb_significant_coeff_flag)
-              << (16 - nb_significant_coeff_flag); //ae(v);
-        } else {
-          coeff_sign_flag[n] =
-              cabac->coeff_sign_flag_decode(nb_significant_coeff_flag - 1)
-              << (16 - (nb_significant_coeff_flag - 1)); //ae(v);
-        }
+        coeff_sign_flag[n] =
+            cabac->coeff_sign_flag_decode(nb_significant_coeff_flag)
+            << (16 - nb_significant_coeff_flag); //ae(v);
+        printf("coeff_sign_flag:%d,nb_significant_coeff_flag:%d\n",
+               coeff_sign_flag[n], nb_significant_coeff_flag);
       }
     }
-    /* TODO YangJing 做到这里来了，应该是这里的某个变量少了2次cabac解码循环 <25-01-26 17:45:26> */
+#else
+    //ffmpeg
+    uint16_t coeff_sign_flag = 0;
+    if (!m_pps->sign_data_hiding_enabled_flag || !signHidden) {
+      coeff_sign_flag = cabac->coeff_sign_flag_decode(nb_significant_coeff_flag)
+                        << (16 - nb_significant_coeff_flag);
+    } else {
+      coeff_sign_flag =
+          cabac->coeff_sign_flag_decode(nb_significant_coeff_flag - 1)
+          << (16 - (nb_significant_coeff_flag - 1));
+    }
+    printf("coeff_sign_flag:%d,nb_significant_coeff_flag:%d\n", coeff_sign_flag,
+           nb_significant_coeff_flag);
+#endif
+
     int numSigCoeff = 0, sumAbsLevel = 0;
-    for (n = 15; n >= 0; n--) {
-      xC = (xS << 2) + ScanOrder[2][scanIdx][n][0];
-      yC = (yS << 2) + ScanOrder[2][scanIdx][n][1];
+    //for (n = 15; n >= 0; n--) {
+    //TODO: ffmpeg这里遍历14此，不知道为什么，先让cabac解码正常，再说，这里应该是有问题的
+    for (n = 14; n >= 0; n--) {
+      int m = significant_coeff_flag_idx[n];
+      xC = (xS << 2) + ScanOrder[2][scanIdx][m][0];
+      yC = (yS << 2) + ScanOrder[2][scanIdx][m][1];
+      //printf("xC:%d,yC:%d,xS:%d,yS:%d,scan_x_off:%d,scan_y_off:%d,scanIdx:%d\n",
+      //xC, yC, xS, yS, ScanOrder[2][scanIdx][m][0],
+      //ScanOrder[2][scanIdx][m][1], scanIdx);
       if (sig_coeff_flag[xC][yC]) {
         int baseLevel = 1 + coeff_abs_level_greater1_flag[n] +
                         coeff_abs_level_greater2_flag[n];
@@ -1127,15 +1277,31 @@ int SliceData::residual_coding(int x0, int y0, int log2TrafoSize,
             ((numSigCoeff < 8) ? ((n == lastGreater1ScanPos) ? 3 : 2) : 1)) {
           coeff_abs_level_remaining[n] =
               cabac->coeff_abs_level_remaining_decode(c_rice_param);
+          printf("coeff_abs_level_remaining:%d,c_rice_param:%d\n",
+                 coeff_abs_level_remaining[n], c_rice_param);
+          //TransCoeffLevel[x0][y0][cIdx][xC][yC] = (coeff_abs_level_remaining[n] + baseLevel) * (1 - 2 * coeff_sign_flag[n]);
+          TransCoeffLevel = (coeff_abs_level_remaining[n] + baseLevel) *
+                            (1 - 2 * coeff_sign_flag);
+          printf("TransCoeffLevel:%d,index:%d\n", TransCoeffLevel, n);
+          //ffmpeg{
+          if (TransCoeffLevel > (3 << c_rice_param))
+            c_rice_param = m_sps->persistent_rice_adaptation_enabled_flag
+                               ? c_rice_param + 1
+                               : MIN(c_rice_param + 1, 4);
+          if (m_sps->persistent_rice_adaptation_enabled_flag && !rice_init) {
+            int initRiceValue = StatCoeff[sbType] / 4;
+            if (coeff_abs_level_remaining[n] >= (3 << initRiceValue))
+              StatCoeff[sbType]++;
+            else if (2 * coeff_abs_level_remaining[n] < (1 << initRiceValue))
+              if (StatCoeff[sbType] > 0) StatCoeff[sbType]--;
+            rice_init = 1;
+          }
         }
-        TransCoeffLevel[x0][y0][cIdx][xC][yC] =
-            (coeff_abs_level_remaining[n] + baseLevel) *
-            (1 - 2 * coeff_sign_flag[n]);
+
         if (m_pps->sign_data_hiding_enabled_flag && signHidden) {
           sumAbsLevel += (coeff_abs_level_remaining[n] + baseLevel);
-          if ((n == firstSigScanPos) && ((sumAbsLevel % 2) == 1))
-            TransCoeffLevel[x0][y0][cIdx][xC][yC] =
-                -TransCoeffLevel[x0][y0][cIdx][xC][yC];
+          if ((m == firstSigScanPos) && ((sumAbsLevel % 2) == 1))
+            TransCoeffLevel = -TransCoeffLevel;
         }
         numSigCoeff++;
       }
@@ -1961,7 +2127,31 @@ int SliceData::Traverse_scan_order_array_initialization_process(
   return 0;
 }
 
-int SliceData::get_scf_offse(int &scf_offset, const uint8_t *&ctx_idx_map_p,
+int SliceData::get_scf_offse0(int &scf_offset, uint8_t *&ctx_idx_map_p,
+                              int transform_skip_flag, int cIdx,
+                              int log2TrafoSize, int x_cg, int y_cg,
+                              int scan_idx, int prev_sig, int i) {
+  if (m_sps->transform_skip_context_enabled_flag &&
+      (transform_skip_flag || cu_transquant_bypass_flag)) {
+    if (cIdx == 0) {
+      scf_offset = 42;
+    } else {
+      scf_offset = 16 + 27;
+    }
+  } else {
+    if (i == 0) {
+      if (cIdx == 0)
+        scf_offset = 0;
+      else
+        scf_offset = 27;
+    } else {
+      scf_offset = 2 + scf_offset;
+    }
+  }
+  return 0;
+}
+
+int SliceData::get_scf_offse(int &scf_offset, uint8_t *&ctx_idx_map_p,
                              int transform_skip_flag, int cIdx,
                              int log2TrafoSize, int x_cg, int y_cg,
                              int scan_idx, int prev_sig) {

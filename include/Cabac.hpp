@@ -97,7 +97,7 @@ class Cabac {
   int ff_hevc_intra_chroma_pred_mode_decode();
   int ff_hevc_merge_idx_decode(int MaxNumMergeCand);
   int decode_cu_skip_flag(int x0, int y0, int x_cb, int y_cb, int ctb_left_flag,
-                          int ctb_up_flag, uint8_t skip_flag[32][32]);
+                          int ctb_up_flag, uint8_t skip_flag[64][64]);
 
   void refill();
   int ff_decode_bypass();
@@ -109,7 +109,7 @@ class Cabac {
   int decode_mb_type(int32_t &synElVal);
   int decode_sub_mb_type(int32_t &synElVal);
   int decode_mvd_lX(int32_t mvd_flag, int32_t mbPartIdx, int32_t subMbPartIdx,
-                    int32_t isChroma, int32_t &synElVal);
+                    int32_t isChroma, int32_t &synElVal) {};
   int decode_ref_idx_lX(int32_t ref_idx_flag, int32_t mbPartIdx,
                         int32_t &synElVal);
   int decode_mb_qp_delta(int32_t &synElVal);

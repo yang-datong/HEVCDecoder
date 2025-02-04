@@ -189,16 +189,16 @@ class SliceData {
     IHEVC_CAB_CTXT_END = IHEVC_CAB_COEFABS_GRTR2_FLAG + 6
   } IHEVC_CABAC_CTXT_OFFSETS;
 
-  uint8_t cu_skip_flag[32][32] = {{0}};
-  uint8_t merge_flag[32][32] = {{0}};
-  uint8_t merge_idx[32][32] = {{0}};
+  uint8_t cu_skip_flag[64][64] = {{0}};
+  uint8_t merge_flag[64][64] = {{0}};
+  uint8_t merge_idx[64][64] = {{0}};
 
-  uint8_t split_transform_flag[32][32][32] = {0};
-  uint8_t cbf_cb[32][32][32] = {0};
-  uint8_t cbf_cr[32][32][32] = {0};
-  uint8_t cbf_luma[32][32][32] = {0};
-  uint8_t rem_intra_luma_pred_mode[32][32] = {0};
-  uint8_t intra_chroma_pred_mode[32][32] = {0};
+  uint8_t split_transform_flag[64][64][64] = {0};
+  uint8_t cbf_cb[64][64][64] = {0};
+  uint8_t cbf_cr[64][64][64] = {0};
+  uint8_t cbf_luma[64][64][64] = {0};
+  uint8_t rem_intra_luma_pred_mode[64][64] = {0};
+  uint8_t intra_chroma_pred_mode[64][64] = {0};
 
   int cu_transquant_bypass_flag = false;
 
@@ -236,10 +236,12 @@ class SliceData {
   int wipe_slice_group_map_types(int32_t *&mapUnitToSliceGroupMap,
                                  const int &MapUnitsInSliceGroup0);
   int explicit_slice_group_map_type(int32_t *&mapUnitToSliceGroupMap);
-  int get_scf_offse(int &scf_offset, const uint8_t *&ctx_idx_map_p,
-                             int transform_skip_flag, int cIdx,
-                             int log2TrafoSize, int x_cg, int y_cg,
-                             int scan_idx, int prev_sig);
+  int get_scf_offse(int &scf_offset, uint8_t *&ctx_idx_map_p,
+                    int transform_skip_flag, int cIdx, int log2TrafoSize,
+                    int x_cg, int y_cg, int scan_idx, int prev_sig);
+  int get_scf_offse0(int &scf_offset, uint8_t *&ctx_idx_map_p,
+                     int transform_skip_flag, int cIdx, int log2TrafoSize,
+                     int x_cg, int y_cg, int scan_idx, int prev_sig, int i);
 };
 
 int NextMbAddress(int n, SliceHeader *slice_header);

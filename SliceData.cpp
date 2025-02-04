@@ -451,12 +451,6 @@ int SliceData::coding_unit(int x0, int y0, int log2CbSize) {
   /* 是否跳过当前 CU 的编码 */
   cu_skip_flag[x0][y0] = 0;
 
-  static int yangjing = 0;
-  yangjing++;
-  if (yangjing == 2) {
-    std::cout << "yangjing = " << yangjing << std::endl;
-  }
-
   if (m_pps->transquant_bypass_enabled_flag) {
     cu_transquant_bypass_flag = cabac->decode_bin(IHEVC_CAB_CU_TQ_BYPASS_FLAG);
     std::cout << "cu_transquant_bypass_flag:" << cu_transquant_bypass_flag
@@ -506,9 +500,6 @@ int SliceData::coding_unit(int x0, int y0, int log2CbSize) {
       /* 如果当前 CU 不是帧内预测，或者 CU 大小等于最小 CU 大小 */
       if (CuPredMode[x0][y0] != MODE_INTRA ||
           log2CbSize == m_sps->MinCbLog2SizeY) {
-        if (yangjing == 2) {
-          int a = 0;
-        }
         /* 解码划分模式 part_mode */
         part_mode = cabac->ff_hevc_part_mode_decode(
             log2CbSize, CuPredMode[x0][y0]); //ae(v);
@@ -516,9 +507,6 @@ int SliceData::coding_unit(int x0, int y0, int log2CbSize) {
         /* 如果划分模式为 PART_NxN 并且当前 CU 使用帧内预测，则设置 IntraSplitFlag 为 1 */
         IntraSplitFlag =
             part_mode == PART_NxN && CuPredMode[x0][y0] == MODE_INTRA;
-        //if (yangjing == 2) {
-        //exit(0);
-        //}
       }
 
       /* 处理帧内预测 */
@@ -1115,7 +1103,6 @@ int SliceData::residual_coding(int x0, int y0, int log2TrafoSize,
     get_scf_offse(scf_offset, ctx_idx_map_p, transform_skip_flag[x0][y0][cIdx],
                   cIdx, log2TrafoSize, xS, yS, scanIdx, prev_sig);
 
-    static int yangjing = 0;
     for (n = (i == lastSubBlock) ? lastScanPos - 1 : 15; n >= 0; n--) {
       xC = (xS << 2) + ScanOrder[2][scanIdx][n][0];
       yC = (yS << 2) + ScanOrder[2][scanIdx][n][1];
@@ -1146,7 +1133,6 @@ int SliceData::residual_coding(int x0, int y0, int log2TrafoSize,
         }
       }
       printf("sig_coeff_flag:%d,xC:%d,yC:%d\n", sig_coeff_flag[xC][yC], xC, yC);
-      printf("yangjing:%d\n", ++yangjing);
     }
 
     int ctx_set = (i > 0 && cIdx == 0) ? 2 : 0;
